@@ -208,7 +208,7 @@ def runtime_state():
         return 'stopped'
 
 def read_network_settings():
-    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'site_title':'OpenRCT2 Server'}
+    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server'}
     if MOCK:
         values.update({'server_name': MOCK_STATE['server']['name'], 'server_description': MOCK_STATE['server']['description'], 'server_greeting':'Willkommen!', 'maxplayers': str(MOCK_STATE['server']['maxPlayers']), 'advertise':'false'})
         return values
@@ -224,7 +224,7 @@ def read_network_settings():
     return values
 
 def write_network_settings(payload):
-    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','site_title'}
+    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title'}
     if MOCK:
         if 'server_name' in payload: MOCK_STATE['server']['name'] = str(payload['server_name'])[:64]
         if 'server_description' in payload: MOCK_STATE['server']['description'] = str(payload['server_description'])[:256]
