@@ -1,0 +1,35 @@
+services:
+  openrct2:
+    image: openrct2/openrct2-cli:0.5.5
+    restart: "no"
+    profiles: ["game"]
+    ports:
+      - "11753:11753/tcp"
+    entrypoint: ["/bin/bash", "/server/start-server.sh"]
+    volumes:
+      - ./data/config:/home/openrct2/.config/OpenRCT2
+      - ./data/rct2:/rct2:ro
+      - ./server:/server:ro
+      - ./plugin/OpenRCT2AdminBridge.js:/home/openrct2/.config/OpenRCT2/plugin/OpenRCT2AdminBridge.js:ro
+
+  admin:
+    build: ./admin
+    restart: unless-stopped
+    environment:
+      RCT2_DATA_DIR: "/data/rct2"
+      ADMIN_PASSWORD: "changeme"
+      SESSION_SECRET: "change-this-session-secret"
+      MOCK_MODE: "false"
+      CONTROL_MODE: "docker"
+      GAME_CONTAINER: "openrct2-server"
+      OPENRCT2_CONFIG: "/data/config/config.ini"
+      SAVE_DIR: "/data/config/save"
+      ACTIVE_SAVE_FILE: "/data/config/save/.active-save"
+      SCREENSHOT_DIR: "/data/config/screenshot"
+      OPENRCT2_VERSION: "0.5.5"
+    ports:
+      - "8088:8088/tcp"
+    volumes:
+      - ./data/config:/data/config
+      - ./data/rct2:/data/rct2
+      - /var/run/docker.sock:/var/run/docker.sock

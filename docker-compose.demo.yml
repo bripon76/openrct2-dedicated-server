@@ -1,0 +1,14 @@
+services:
+  admin:
+    build: ./admin
+    restart: unless-stopped
+    environment:
+      RCT2_DATA_DIR: "/data/rct2"
+      ADMIN_PASSWORD: "changeme"
+      SESSION_SECRET: "change-this-session-secret"
+      MOCK_MODE: "true"
+      CONTROL_MODE: "mock"
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./data:/data

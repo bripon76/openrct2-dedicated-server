@@ -1,0 +1,16 @@
+# Runtime data and copyrighted RCT2 files
+data/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python build artefacts
+__pycache__/
+*.py[cod]
+
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
