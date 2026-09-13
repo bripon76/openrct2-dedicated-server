@@ -41,6 +41,27 @@ Die `.env` kann bei Bedarf um den externen Hostnamen ergaenzt werden:
 PUBLIC_HOST=openrct2.example.com
 ```
 
+## Bestehenden LXC auf Git umstellen
+
+Wenn bereits ein manuell kopiertes Projekt unter `/opt/openrct2-admin` vorhanden ist, werden nur die versionierten Programmdateien durch Git ersetzt. Die ignorierten Laufzeitdaten unter `data/` und die `.env` bleiben dabei erhalten.
+
+```sh
+cd /opt/openrct2-admin
+git init -b master
+git remote add origin <repository-url>
+git fetch origin master
+git reset --hard origin/master
+./deploy/update-alpine-lxc.sh
+```
+
+Vor einem Update kann die konfigurierte Repository-URL kontrolliert werden:
+
+```sh
+cd /opt/openrct2-admin
+git remote get-url origin
+git log -1 --oneline
+```
+
 ## Update aus Git
 
 Nach einem Push im LXC ausfuehren:
@@ -50,6 +71,8 @@ Nach einem Push im LXC ausfuehren:
 ```
 
 Das Update holt `origin/master`, baut den Admincontainer neu und erstellt den Gameserver neu. Lief er vorher, wird er automatisch wieder gestartet. Nicht versionierte Laufzeitdaten unter `data/` und die `.env` bleiben erhalten.
+
+`update-alpine-lxc.sh` führt bereits `git fetch` und den Checkout von `origin/master` aus. Ein zusätzliches `git pull` ist nicht erforderlich.
 
 Fuer einen anderen Branch den Branch explizit setzen:
 
@@ -67,6 +90,21 @@ docker compose -f docker-compose.live-mac.yml --profile game create openrct2
 ```
 
 Das Interface ist unter `http://localhost:8088/admin` erreichbar.
+
+## Multiplayer und mehrere Parks
+
+Ein OpenRCT2-Gameserver hostet genau einen geladenen Park, kann aber mehrere Spieler gleichzeitig in diesem Park aufnehmen. Der aktuelle Admin verwaltet deshalb eine Gameserver-Instanz und einen aktiven Spielstand.
+
+Mehrere Parks gleichzeitig sind möglich, erfordern aber mehrere Gameserver-Instanzen. Die derzeitige Oberfläche ist noch kein Mehrserver-Manager.
+
+Die empfohlene Betriebsform ist ein LXC pro Park:
+
+- Jeder LXC hat eine eigene Git-Installation, eigene `data/`-Laufzeitdaten und einen eigenen Adminzugang.
+- Jeder Gameserver lauscht intern auf `11753/tcp`.
+- Nach aussen braucht jeder Park einen eigenen TCP-Port, zum Beispiel `11753` und `11754`, die jeweils an `11753` des passenden LXC weitergeleitet werden.
+- Ein HTTP-Reverse-Proxy kann pro Park eine eigene Webadresse auf den jeweiligen Adminport `8088` leiten, transportiert aber nicht das OpenRCT2-Multiplayer-Protokoll.
+
+Alternativ koennen mehrere Compose-Projekte in einem LXC betrieben werden. Dafuer muessen pro Park eindeutige Container-Namen, Datenverzeichnisse, Adminports und Gameserverports konfiguriert werden. Eine zentrale Webverwaltung aller Instanzen ist dafuer als eigener Ausbau noetig.
 
 ## Laufzeitdaten
 
