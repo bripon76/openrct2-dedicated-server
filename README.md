@@ -80,6 +80,19 @@ Fuer einen anderen Branch den Branch explizit setzen:
 BRANCH=main /opt/openrct2-admin/deploy/update-alpine-lxc.sh
 ```
 
+## Git-Info
+
+Der laufende Versionsstand und das konfigurierte Remote-Repository lassen sich jederzeit im LXC anzeigen:
+
+```sh
+cd /opt/openrct2-admin
+git log -1 --oneline
+git status --short
+git remote -v
+```
+
+Vor jedem Release werden die Git-Informationen in dieser Anleitung und die Update-Schritte mitgepflegt.
+
 ## Lokale Entwicklung
 
 ```sh
