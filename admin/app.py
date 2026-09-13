@@ -290,7 +290,7 @@ def branding_logo_url():
         path = pathlib.Path(BRANDING_DIR) / f'logo{extension}'
         if path.is_file():
             return f'/branding/logo?updated={int(path.stat().st_mtime)}'
-    return '/static/favicon.svg'
+    return '/static/openrct2-server-logo.png'
 
 def setup_status():
     data = rct2_data_status()
@@ -937,7 +937,7 @@ def branding_logo():
         filename = f'logo{extension}'
         if os.path.isfile(os.path.join(BRANDING_DIR, filename)):
             return send_from_directory(BRANDING_DIR, filename, max_age=0)
-    return send_from_directory(app.static_folder, 'favicon.svg', max_age=0)
+    return send_from_directory(app.static_folder, 'openrct2-server-logo.png', max_age=0)
 
 @app.post('/api/branding/logo')
 @require_admin
