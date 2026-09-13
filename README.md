@@ -39,7 +39,7 @@ Die `.env` kann bei Bedarf um den externen Hostnamen ergaenzt werden:
 
 ```dotenv
 PUBLIC_HOST=openrct2.example.com
-PROJECT_URL=https://github.com/your-account/your-project
+PROJECT_URL=https://github.com/bripon76/openrct2-dedicated-server
 ```
 
 ## Bestehenden LXC auf Git umstellen
