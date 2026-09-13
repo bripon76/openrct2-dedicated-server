@@ -8,30 +8,30 @@ PORT="${OPENRCT2_PORT:-11753}"
 
 mkdir -p "/home/openrct2/.config/OpenRCT2/screenshot"
 
-echo "[serververwalter] OpenRCT2 live launcher"
-echo "[serververwalter] validating original RCT2 data..."
+echo "[openrct2-admin] OpenRCT2 live launcher"
+echo "[openrct2-admin] validating original RCT2 data..."
 
 if [[ ! -f "${RCT2_DATA}/Data/g1.dat" ]]; then
-  echo "[serververwalter] ERROR: ${RCT2_DATA}/Data/g1.dat missing"
+  echo "[openrct2-admin] ERROR: ${RCT2_DATA}/Data/g1.dat missing"
   exit 20
 fi
 if [[ ! -d "${RCT2_DATA}/ObjData" ]]; then
-  echo "[serververwalter] ERROR: ${RCT2_DATA}/ObjData missing"
+  echo "[openrct2-admin] ERROR: ${RCT2_DATA}/ObjData missing"
   exit 21
 fi
 if [[ ! -s "${ACTIVE_FILE}" ]]; then
-  echo "[serververwalter] no active save marker found; scanning save directory..."
+  echo "[openrct2-admin] no active save marker found; scanning save directory..."
   mapfile -t SAVE_CANDIDATES < <(find "${SAVE_DIR}" -maxdepth 1 -type f \( -iname '*.sv6' -o -iname '*.park' \) -printf '%f\n' | sort)
 
   if [[ ${#SAVE_CANDIDATES[@]} -eq 0 ]]; then
-    echo "[serververwalter] ERROR: no .SV6 or .park save found"
+    echo "[openrct2-admin] ERROR: no .SV6 or .park save found"
     exit 22
   elif [[ ${#SAVE_CANDIDATES[@]} -eq 1 ]]; then
     SAVE_NAME="${SAVE_CANDIDATES[0]}"
     printf '%s\n' "${SAVE_NAME}" > "${ACTIVE_FILE}"
-    echo "[serververwalter] automatically selected only save: ${SAVE_NAME}"
+    echo "[openrct2-admin] automatically selected only save: ${SAVE_NAME}"
   else
-    echo "[serververwalter] ERROR: multiple saves found but none selected:"
+    echo "[openrct2-admin] ERROR: multiple saves found but none selected:"
     printf '  - %s\n' "${SAVE_CANDIDATES[@]}"
     exit 22
   fi
@@ -40,14 +40,24 @@ else
 fi
 case "${SAVE_NAME,,}" in
   *.sv6|*.park) ;;
-  *) echo "[serververwalter] ERROR: invalid active save extension"; exit 23 ;;
+  *) echo "[openrct2-admin] ERROR: invalid active save extension"; exit 23 ;;
 esac
 
 SAVE_PATH="${SAVE_DIR}/${SAVE_NAME}"
 if [[ ! -f "${SAVE_PATH}" ]]; then
-  echo "[serververwalter] ERROR: active save not found: ${SAVE_PATH}"
+  echo "[openrct2-admin] ERROR: active save not found: ${SAVE_PATH}"
   exit 24
 fi
 
-echo "[serververwalter] starting: ${SAVE_NAME} on TCP ${PORT}"
+# Continue from a newer autosave unless the user selected another save later.
+LATEST_AUTOSAVE=""
+if [[ -d "${SAVE_DIR}/autosave" ]]; then
+  LATEST_AUTOSAVE="$(find "${SAVE_DIR}/autosave" -maxdepth 1 -type f \( -iname '*.sv6' -o -iname '*.park' \) -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2- | head -n 1)"
+fi
+if [[ -n "${LATEST_AUTOSAVE}" && "${LATEST_AUTOSAVE}" -nt "${ACTIVE_FILE}" ]]; then
+  SAVE_PATH="${LATEST_AUTOSAVE}"
+  echo "[openrct2-admin] continuing from autosave: $(basename "${SAVE_PATH}")"
+fi
+
+echo "[openrct2-admin] starting: ${SAVE_NAME} on TCP ${PORT}"
 exec openrct2-cli host "${SAVE_PATH}"   --headless   --port "${PORT}"   --user-data-path /home/openrct2/.config/OpenRCT2   --rct2-data-path "${RCT2_DATA}"

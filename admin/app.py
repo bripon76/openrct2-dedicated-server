@@ -131,7 +131,7 @@ app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_BYTES', str(1024 * 
 MOCK_STATE = {
     'server': {
         'online': True, 'state': 'running', 'version': '0.5.5',
-        'name': 'OpenRCT2 Server Testserver', 'park': 'OpenRCT2 Server Park',
+        'name': 'OpenRCT2 Testserver', 'park': 'OpenRCT2 Park',
         'uptime': '2h 41m', 'port': 11753, 'address': 'localhost:11753',
         'maxPlayers': 10, 'description': 'OpenRCT2 Multiplayer Testserver'
     },
@@ -219,8 +219,8 @@ def read_network_settings():
         for k in values:
             if k == 'site_title': continue
             if cfg.has_option('network', k): values[k] = cfg.get('network', k).strip('"')
-    if cfg.has_option('serververwalter', 'site_title'):
-        values['site_title'] = cfg.get('serververwalter', 'site_title').strip('"')
+    if cfg.has_option('openrct2_admin', 'site_title'):
+        values['site_title'] = cfg.get('openrct2_admin', 'site_title').strip('"')
     return values
 
 def write_network_settings(payload):
@@ -238,8 +238,8 @@ def write_network_settings(payload):
     for k,v in payload.items():
         if k not in allowed: continue
         if k == 'site_title':
-            if not cfg.has_section('serververwalter'): cfg.add_section('serververwalter')
-            cfg.set('serververwalter', k, str(v).replace('\n',' ')[:64])
+            if not cfg.has_section('openrct2_admin'): cfg.add_section('openrct2_admin')
+            cfg.set('openrct2_admin', k, str(v).replace('\n',' ')[:64])
             continue
         if k == 'maxplayers': v = str(max(1, min(255, int(v))))
         elif k == 'advertise': v = 'true' if str(v).lower() in ('1','true','yes','on') else 'false'
@@ -247,6 +247,37 @@ def write_network_settings(payload):
         cfg.set('network', k, v)
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f: cfg.write(f, space_around_delimiters=True)
     return read_network_settings()
+
+def setup_status():
+    data = rct2_data_status()
+    active_save = get_active_save()
+    completed = False
+    if os.path.exists(CONFIG_FILE):
+        cfg = configparser.ConfigParser(interpolation=None)
+        cfg.read(CONFIG_FILE)
+        completed = cfg.getboolean('openrct2_admin', 'setup_completed', fallback=False)
+    return {
+        'complete': completed or (os.path.exists(CONFIG_FILE) and bool(data.get('complete')) and bool(active_save)),
+        'rct2_ready': bool(data.get('complete')),
+        'active_save': active_save,
+        'save_ready': bool(active_save),
+    }
+
+def complete_setup(payload):
+    status = setup_status()
+    if not status['rct2_ready'] or not status['save_ready']:
+        raise ValueError('Originaldaten und ein aktiver Spielstand werden benötigt')
+    settings = write_network_settings(payload)
+    cfg = configparser.ConfigParser(interpolation=None)
+    cfg.optionxform = str
+    if os.path.exists(CONFIG_FILE):
+        cfg.read(CONFIG_FILE)
+    if not cfg.has_section('openrct2_admin'):
+        cfg.add_section('openrct2_admin')
+    cfg.set('openrct2_admin', 'setup_completed', 'true')
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        cfg.write(f, space_around_delimiters=True)
+    return settings
 
 def map_images():
     images = []
@@ -795,8 +826,30 @@ def get_settings(): return jsonify(read_network_settings())
 @app.post('/api/server/settings')
 @require_admin
 def set_settings():
-    try: return jsonify({'ok':True,'settings':write_network_settings(request.get_json(force=True) or {}),'restartRequired':True})
-    except Exception as e: return jsonify({'ok':False,'error':str(e)}),400
+    try:
+        was_running = not MOCK and CONTROL_MODE == 'docker' and runtime_state() == 'running'
+        if was_running:
+            docker_container().stop(timeout=20)
+        settings = write_network_settings(request.get_json(force=True) or {})
+        if was_running:
+            docker_container().start()
+        return jsonify({'ok': True, 'settings': settings, 'restarted': was_running})
+    except Exception as e:
+        return jsonify({'ok':False,'error':str(e)}),400
+
+@app.get('/api/setup')
+@require_admin
+def get_setup():
+    return jsonify({'ok': True, **setup_status()})
+
+@app.post('/api/setup/complete')
+@require_admin
+def finish_setup():
+    try:
+        return jsonify({'ok': True, 'settings': complete_setup(request.get_json(force=True) or {}), 'setup': setup_status()})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
 @app.post('/api/server/control')
 @require_admin
 def server_control():
@@ -891,6 +944,7 @@ def api_dashboard():
         'saves': list_saves(),
         'active_save': get_active_save(),
         'settings': read_network_settings(),
+        'setup': setup_status(),
         'backups': list_backups(),
     })
 

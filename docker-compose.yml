@@ -11,8 +11,6 @@ services:
       MOCK_MODE: "false"
       CONTROL_MODE: "docker"
       GAME_CONTAINER: "openrct2-server"
-      BRIDGE_HOST: "openrct2"
-      BRIDGE_PORT: "11754"
       OPENRCT2_CONFIG: "/data/config/config.ini"
       SAVE_DIR: "/data/config/save"
       ACTIVE_SAVE_FILE: "/data/config/save/.active-save"
@@ -28,7 +26,6 @@ services:
 
   openrct2:
     image: openrct2/openrct2-cli:0.5.5
-    platform: linux/amd64
     container_name: openrct2-server
     restart: unless-stopped
     stop_grace_period: 30s
@@ -36,6 +33,12 @@ services:
     entrypoint: ["/bin/bash", "/server/start-server.sh"]
     ports:
       - "11753:11753/tcp"
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/11753"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     environment:
       SAVE_DIR: "/home/openrct2/.config/OpenRCT2/save"
       ACTIVE_SAVE_FILE: "/home/openrct2/.config/OpenRCT2/save/.active-save"

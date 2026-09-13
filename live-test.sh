@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-echo "=== OpenRCT2 Server OpenRCT2 V9 ==="
+echo "=== OpenRCT2 Admin ==="
 docker compose -f docker-compose.live-mac.yml down --remove-orphans 2>/dev/null || true
 docker compose -f docker-compose.live-mac.yml up --build -d admin
 echo

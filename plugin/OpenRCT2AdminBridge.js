@@ -1,4 +1,4 @@
-/* OpenRCT2 Server OpenRCT2 Admin Bridge
+/* OpenRCT2 Admin Bridge
  * Remote plugin, server-side only. Local JSON/TCP bridge + periodic map capture.
  */
 const PERMISSIONS = [
@@ -46,4 +46,4 @@ function main() {
   listener.listen(11754,'127.0.0.1');
   console.log('[AdminBridge] listening on 127.0.0.1:11754; map capture is handled by the CLI service');
 }
-registerPlugin({name:'OpenRCT2 Server Admin Bridge',version:'0.3.0',authors:['OpenRCT2 Server prototype'],type:'remote',licence:'MIT',targetApiVersion:77,main});
+registerPlugin({name:'OpenRCT2 Admin Bridge',version:'0.3.0',authors:['OpenRCT2 Admin'],type:'remote',licence:'MIT',targetApiVersion:77,main});
