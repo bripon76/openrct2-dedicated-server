@@ -144,7 +144,6 @@ MOCK_STATE = {
         {'id': 2, 'name': 'Builder', 'permissions': ['chat','create_ride','build_ride','ride_properties','scenery','path','guest','staff']},
     ],
     'players': [
-        {'id': 4, 'name': 'Admin', 'group': 0, 'ping': 18, 'commandsRan': 421, 'moneySpent': 153420},
         {'id': 7, 'name': 'Player01', 'group': 2, 'ping': 31, 'commandsRan': 94, 'moneySpent': 32870},
         {'id': 9, 'name': 'Gast123', 'group': 1, 'ping': 48, 'commandsRan': 2, 'moneySpent': 0},
     ]

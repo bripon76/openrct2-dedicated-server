@@ -11,12 +11,13 @@ function captureMap() {
   return result(false, { error:'Headless captureImage is unavailable; use the CLI capture service.' });
 }
 function status() {
+  const localPlayer = network.currentPlayer;
   return {
     ok: true,
     server: { online: network.mode === 'server', version: 'OpenRCT2', park: park.name || 'current park', port: 11753 },
     defaultGroup: network.defaultGroup,
     groups: network.groups.map(g => ({ id: g.id, name: g.name, permissions: g.permissions.slice() })),
-    players: network.players.map(p => ({ id:p.id, name:p.name, group:p.group, ping:p.ping, commandsRan:p.commandsRan, moneySpent:p.moneySpent }))
+    players: network.players.filter(p => !localPlayer || p.id !== localPlayer.id).map(p => ({ id:p.id, name:p.name, group:p.group, ping:p.ping, commandsRan:p.commandsRan, moneySpent:p.moneySpent }))
   };
 }
 function exec(action, args) { return new Promise(resolve => context.executeAction(action, args, r => resolve(r))); }
