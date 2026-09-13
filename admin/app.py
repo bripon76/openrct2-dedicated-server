@@ -120,6 +120,7 @@ MANIFEST_FILE = os.getenv('RCT2_MANIFEST_FILE', os.path.join(os.path.dirname(__f
 SCREENSHOT_DIR = os.getenv('SCREENSHOT_DIR', '/data/config/screenshot')
 OPENRCT2_VERSION = os.getenv('OPENRCT2_VERSION', '0.5.5')
 PUBLIC_HOST = os.getenv('PUBLIC_HOST', 'openrct2.example.com')
+PROJECT_URL = os.getenv('PROJECT_URL', 'https://github.com/')
 MAP_VIEW_COUNT = 4
 MAP_HISTORY_LIMIT = 20
 MAP_REFRESH_SECONDS = int(os.getenv('MAP_REFRESH_SECONDS', '300'))
@@ -130,6 +131,7 @@ IMAGE_SELECTION_FILE = os.getenv('OPENRCT2_IMAGE_FILE', '/data/config/.openrct2-
 IMAGE_REPOSITORY = 'openrct2/openrct2-cli'
 IMAGE_TAG_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
 IMAGE_REQUEST_TIMEOUT = 10
+WEB_SETTINGS_FILE = os.getenv('WEB_SETTINGS_FILE', '/data/config/admin-settings.json')
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_BYTES', str(1024 * 1024 * 1024)))
 
 MOCK_STATE = {
@@ -210,12 +212,33 @@ def runtime_state():
     except Exception:
         return 'stopped'
 
+def read_web_settings():
+    try:
+        raw = json.loads(pathlib.Path(WEB_SETTINGS_FILE).read_text(encoding='utf-8'))
+        if not isinstance(raw, dict):
+            return {}
+        return {key: str(raw[key]).replace('\n', ' ')[:256] for key in ('site_title', 'admin_footer_text', 'public_footer_text') if key in raw}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def write_web_settings(values):
+    path = pathlib.Path(WEB_SETTINGS_FILE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    merged = read_web_settings()
+    merged.update({key: str(value).replace('\n', ' ')[:256] for key, value in values.items()})
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(merged, ensure_ascii=True, sort_keys=True) + '\n', encoding='utf-8')
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, path)
+
 def read_network_settings():
     values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':''}
     if MOCK:
         values.update({'server_name': MOCK_STATE['server']['name'], 'server_description': MOCK_STATE['server']['description'], 'server_greeting':'Willkommen!', 'maxplayers': str(MOCK_STATE['server']['maxPlayers']), 'advertise':'false'})
         return values
-    if not os.path.exists(CONFIG_FILE): return values
+    if not os.path.exists(CONFIG_FILE):
+        values.update(read_web_settings())
+        return values
     cfg = configparser.ConfigParser(interpolation=None)
     cfg.read(CONFIG_FILE)
     if cfg.has_section('network'):
@@ -227,14 +250,17 @@ def read_network_settings():
     for key in ('admin_footer_text', 'public_footer_text'):
         if cfg.has_option('openrct2_admin', key):
             values[key] = cfg.get('openrct2_admin', key).strip('"')
+    values.update(read_web_settings())
     return values
 
 def write_network_settings(payload):
     allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text'}
+    web_keys = {'site_title', 'admin_footer_text', 'public_footer_text'}
     if MOCK:
         if 'server_name' in payload: MOCK_STATE['server']['name'] = str(payload['server_name'])[:64]
         if 'server_description' in payload: MOCK_STATE['server']['description'] = str(payload['server_description'])[:256]
         if 'maxplayers' in payload: MOCK_STATE['server']['maxPlayers'] = max(1, min(255, int(payload['maxplayers'])))
+        write_web_settings({key: payload[key] for key in web_keys if key in payload})
         return read_network_settings()
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     cfg = configparser.ConfigParser(interpolation=None)
@@ -252,6 +278,9 @@ def write_network_settings(payload):
         else: v = str(v).replace('\n',' ')[:256]
         cfg.set('network', k, v)
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f: cfg.write(f, space_around_delimiters=True)
+    web_values = {key: payload[key] for key in web_keys if key in payload}
+    if web_values:
+        write_web_settings(web_values)
     return read_network_settings()
 
 def setup_status():
@@ -382,6 +411,7 @@ def state():
         'siteTitle': settings.get('site_title') or 'OpenRCT2 Server',
         'adminFooterText': settings.get('admin_footer_text', ''),
         'publicFooterText': settings.get('public_footer_text', ''),
+        'projectUrl': PROJECT_URL,
     }
     try:
         bridge_status = bridge_call({'cmd':'status'})
