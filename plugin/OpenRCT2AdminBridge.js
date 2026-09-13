@@ -35,8 +35,8 @@ async function command(q) {
     }
     case 'remove_group': network.removeGroup(Number(q.groupId)); return result(true);
     case 'set_default_group': network.defaultGroup=Number(q.groupId); return result(true);
-    case 'rename_group': { const g=network.getGroup(Number(q.groupId)); if(!g)return result(false,{error:'group not found'}); g.name=String(q.name||'').slice(0,64); return result(true); }
-    case 'set_group_permissions': { const g=network.getGroup(Number(q.groupId)); if(!g)return result(false,{error:'group not found'}); g.permissions=(Array.isArray(q.permissions)?q.permissions:[]).filter(p=>PERMISSIONS.includes(p)); return result(true); }
+    case 'rename_group': { const g=network.groups.find(group=>Number(group.id)===Number(q.groupId)); if(!g)return result(false,{error:'group not found'}); g.name=String(q.name||'').slice(0,64); return result(true); }
+    case 'set_group_permissions': { const g=network.groups.find(group=>Number(group.id)===Number(q.groupId)); if(!g)return result(false,{error:'group not found'}); g.permissions=(Array.isArray(q.permissions)?q.permissions:[]).filter(p=>PERMISSIONS.includes(p)); return result(true,{permissions:g.permissions.slice()}); }
     default: return result(false,{error:'unknown command'});
   }
 }

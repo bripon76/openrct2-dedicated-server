@@ -846,7 +846,7 @@ def admin_page(): return send_from_directory(app.static_folder, 'index.html')
 def public_page(): return send_from_directory(app.static_folder, 'public.html')
 @app.route('/map/current.png')
 def current_map():
-    if read_network_settings().get('public_show_park_views', 'true') != 'true':
+    if str(read_network_settings().get('public_show_park_views', 'true')).lower() != 'true':
         return send_from_directory(app.static_folder, 'park-demo.svg', max_age=0)
     path = os.path.join(SCREENSHOT_DIR, 'server-map.png')
     if os.path.exists(path): return send_from_directory(SCREENSHOT_DIR, 'server-map.png', max_age=0)
@@ -855,7 +855,7 @@ def current_map():
 @app.route('/map/<int:rotation>.png')
 def map_rotation(rotation):
     if rotation not in range(4): return ('Not Found', 404)
-    if read_network_settings().get('public_show_park_views', 'true') != 'true':
+    if str(read_network_settings().get('public_show_park_views', 'true')).lower() != 'true':
         return send_from_directory(app.static_folder, 'park-demo.svg', max_age=0)
     filename = f'server-map-{rotation}.png'
     if os.path.exists(os.path.join(SCREENSHOT_DIR, filename)):
