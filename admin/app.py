@@ -294,6 +294,13 @@ def map_images():
             images.append({'index': index, 'image': f'/map/{index}.png?t={int(os.path.getmtime(path))}'})
     return images
 
+def current_runtime_save():
+    active = pathlib.Path(SAVE_DIR) / get_active_save()
+    latest = _latest_autosave()
+    if latest and (not active.exists() or latest.stat().st_mtime > active.stat().st_mtime):
+        return latest
+    return active
+
 def capture_map_views():
     preflight = server_preflight()
     if not preflight.get('ready'):
@@ -302,8 +309,10 @@ def capture_map_views():
         raise RuntimeError('Kartenaufnahme ist nur im Docker-Livebetrieb verfügbar')
 
     with MAP_CAPTURE_LOCK:
-        active_save = preflight['active_save']
-        game_save = f'/home/openrct2/.config/OpenRCT2/save/{active_save}'
+        runtime_save = current_runtime_save()
+        if not runtime_save.is_file():
+            raise RuntimeError('Kein aktueller Spielstand für die Kartenaufnahme verfügbar')
+        game_save = '/home/openrct2/.config/OpenRCT2/save/' + str(runtime_save.relative_to(SAVE_DIR))
         client = docker_container()
         client.exec_run(['openrct2-cli', 'set-rct2', '/rct2'], environment={'HOME': '/home/openrct2'})
         os.makedirs(SCREENSHOT_DIR, exist_ok=True)
@@ -1029,6 +1038,19 @@ def server_control():
         return jsonify({'ok': True, 'state': c.status})
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Docker-Fehler: {e}'}), 503
+
+@app.get('/api/server/logs')
+@require_admin
+def server_logs():
+    if MOCK:
+        return jsonify({'ok': True, 'logs': 'Mock-Modus: keine Containerlogs verfügbar.'})
+    if CONTROL_MODE != 'docker':
+        return jsonify({'ok': False, 'error': 'Docker-Steuerung deaktiviert'}), 403
+    try:
+        logs = docker_container().logs(tail=200, timestamps=True).decode('utf-8', errors='replace')
+        return jsonify({'ok': True, 'logs': logs})
+    except Exception as error:
+        return jsonify({'ok': False, 'error': str(error)}), 503
 
 @app.post('/api/action')
 @require_admin
