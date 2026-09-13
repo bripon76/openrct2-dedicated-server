@@ -132,6 +132,7 @@ IMAGE_REPOSITORY = 'openrct2/openrct2-cli'
 IMAGE_TAG_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
 IMAGE_REQUEST_TIMEOUT = 10
 WEB_SETTINGS_FILE = os.getenv('WEB_SETTINGS_FILE', '/data/config/admin-settings.json')
+BRANDING_DIR = os.getenv('BRANDING_DIR', '/data/config/branding')
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_BYTES', str(1024 * 1024 * 1024)))
 
 MOCK_STATE = {
@@ -217,7 +218,8 @@ def read_web_settings():
         raw = json.loads(pathlib.Path(WEB_SETTINGS_FILE).read_text(encoding='utf-8'))
         if not isinstance(raw, dict):
             return {}
-        return {key: str(raw[key]).replace('\n', ' ')[:256] for key in ('site_title', 'admin_footer_text', 'public_footer_text') if key in raw}
+        keys = ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text')
+        return {key: str(raw[key]).replace('\r', '')[:1000] for key in keys if key in raw}
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
@@ -225,14 +227,14 @@ def write_web_settings(values):
     path = pathlib.Path(WEB_SETTINGS_FILE)
     path.parent.mkdir(parents=True, exist_ok=True)
     merged = read_web_settings()
-    merged.update({key: str(value).replace('\n', ' ')[:256] for key, value in values.items()})
+    merged.update({key: str(value).replace('\r', '')[:1000 if key == 'public_info_text' else 256] for key, value in values.items()})
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(merged, ensure_ascii=True, sort_keys=True) + '\n', encoding='utf-8')
     os.chmod(temporary, 0o600)
     os.replace(temporary, path)
 
 def read_network_settings():
-    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':''}
+    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':'', 'server_address':'', 'public_info_title':'', 'public_info_text':''}
     if MOCK:
         values.update({'server_name': MOCK_STATE['server']['name'], 'server_description': MOCK_STATE['server']['description'], 'server_greeting':'Willkommen!', 'maxplayers': str(MOCK_STATE['server']['maxPlayers']), 'advertise':'false'})
         return values
@@ -243,19 +245,19 @@ def read_network_settings():
     cfg.read(CONFIG_FILE)
     if cfg.has_section('network'):
         for k in values:
-            if k in ('site_title', 'admin_footer_text', 'public_footer_text'): continue
+            if k in ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text'): continue
             if cfg.has_option('network', k): values[k] = cfg.get('network', k).strip('"')
     if cfg.has_option('openrct2_admin', 'site_title'):
         values['site_title'] = cfg.get('openrct2_admin', 'site_title').strip('"')
-    for key in ('admin_footer_text', 'public_footer_text'):
+    for key in ('admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text'):
         if cfg.has_option('openrct2_admin', key):
             values[key] = cfg.get('openrct2_admin', key).strip('"')
     values.update(read_web_settings())
     return values
 
 def write_network_settings(payload):
-    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text'}
-    web_keys = {'site_title', 'admin_footer_text', 'public_footer_text'}
+    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text','server_address','public_info_title','public_info_text'}
+    web_keys = {'site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text'}
     if MOCK:
         if 'server_name' in payload: MOCK_STATE['server']['name'] = str(payload['server_name'])[:64]
         if 'server_description' in payload: MOCK_STATE['server']['description'] = str(payload['server_description'])[:256]
@@ -282,6 +284,13 @@ def write_network_settings(payload):
     if web_values:
         write_web_settings(web_values)
     return read_network_settings()
+
+def branding_logo_url():
+    for extension in ('.png', '.jpg', '.jpeg', '.webp'):
+        path = pathlib.Path(BRANDING_DIR) / f'logo{extension}'
+        if path.is_file():
+            return f'/branding/logo?updated={int(path.stat().st_mtime)}'
+    return '/static/favicon.svg'
 
 def setup_status():
     data = rct2_data_status()
@@ -405,13 +414,16 @@ def state():
             'description': settings.get('server_description', ''),
             'maxPlayers': int(settings.get('maxplayers') or 10),
             'port': 11753,
-            'address': f"{PUBLIC_HOST}:11753",
+            'address': settings.get('server_address') or f"{PUBLIC_HOST}:11753",
         },
         'players': [],
         'siteTitle': settings.get('site_title') or 'OpenRCT2 Server',
         'adminFooterText': settings.get('admin_footer_text', ''),
         'publicFooterText': settings.get('public_footer_text', ''),
         'projectUrl': PROJECT_URL,
+        'logoUrl': branding_logo_url(),
+        'publicInfoTitle': settings.get('public_info_title', ''),
+        'publicInfoText': settings.get('public_info_text', ''),
     }
     try:
         bridge_status = bridge_call({'cmd':'status'})
@@ -427,6 +439,7 @@ def state():
         'description': settings.get('server_description', ''),
         'maxPlayers': int(settings.get('maxplayers') or 10),
         'port': 11753,
+        'address': settings.get('server_address') or f"{PUBLIC_HOST}:11753",
         'version': f'OpenRCT2 {selected_game_version()}',
     })
     shot = os.path.join(SCREENSHOT_DIR, 'server-map.png')
@@ -917,6 +930,27 @@ def api_rct2_data_delete():
         return jsonify({'ok':True,'status':rct2_data_status()})
     except Exception as e:
         return jsonify({'ok':False,'error':str(e)}),500
+
+@app.get('/branding/logo')
+def branding_logo():
+    for extension in ('.png', '.jpg', '.jpeg', '.webp'):
+        filename = f'logo{extension}'
+        if os.path.isfile(os.path.join(BRANDING_DIR, filename)):
+            return send_from_directory(BRANDING_DIR, filename, max_age=0)
+    return send_from_directory(app.static_folder, 'favicon.svg', max_age=0)
+
+@app.post('/api/branding/logo')
+@require_admin
+def upload_branding_logo():
+    image = request.files.get('file')
+    extension = pathlib.Path(image.filename).suffix.lower() if image and image.filename else ''
+    if extension not in ('.png', '.jpg', '.jpeg', '.webp'):
+        return jsonify({'ok': False, 'error': 'Bitte PNG, JPG oder WebP auswählen'}), 400
+    os.makedirs(BRANDING_DIR, exist_ok=True)
+    for entry in pathlib.Path(BRANDING_DIR).glob('logo.*'):
+        entry.unlink()
+    image.save(os.path.join(BRANDING_DIR, f'logo{extension}'))
+    return jsonify({'ok': True, 'logoUrl': branding_logo_url()})
 
 @app.get('/api/preflight')
 @require_admin
