@@ -72,7 +72,7 @@ Nach einem Push im LXC ausfuehren:
 
 Das Update holt `origin/master`, baut den Admincontainer neu und erstellt den Gameserver neu. Lief er vorher, wird er automatisch wieder gestartet. Nicht versionierte Laufzeitdaten unter `data/` und die `.env` bleiben erhalten.
 
-`update-alpine-lxc.sh` führt bereits `git fetch` und den Checkout von `origin/master` aus. Ein zusätzliches `git pull` ist nicht erforderlich.
+`update-alpine-lxc.sh` fuehrt bereits `git fetch` und den Checkout von `origin/master` aus. Ein zusaetzliches `git pull` ist nicht erforderlich.
 
 Fuer einen anderen Branch den Branch explizit setzen:
 
@@ -95,7 +95,7 @@ Das Interface ist unter `http://localhost:8088/admin` erreichbar.
 
 Ein OpenRCT2-Gameserver hostet genau einen geladenen Park, kann aber mehrere Spieler gleichzeitig in diesem Park aufnehmen. Der aktuelle Admin verwaltet deshalb eine Gameserver-Instanz und einen aktiven Spielstand.
 
-Mehrere Parks gleichzeitig sind möglich, erfordern aber mehrere Gameserver-Instanzen. Die derzeitige Oberfläche ist noch kein Mehrserver-Manager.
+Mehrere Parks gleichzeitig sind moeglich, erfordern aber mehrere Gameserver-Instanzen. Die derzeitige Oberflaeche ist noch kein Mehrserver-Manager.
 
 Die empfohlene Betriebsform ist ein LXC pro Park:
 
