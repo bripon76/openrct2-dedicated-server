@@ -1,5 +1,5 @@
 from flask import Flask, Response, jsonify, request, send_from_directory, session, redirect, stream_with_context
-import configparser, json, os, socket, time, secrets, pathlib, zipfile, shutil, tempfile, shlex, threading, random, tarfile, io
+import configparser, json, os, socket, time, secrets, pathlib, zipfile, shutil, tempfile, shlex, threading, random, tarfile, io, re, urllib.request
 
 try:
     import docker
@@ -46,7 +46,7 @@ def setup_state():
 def _docker_client():
     try:
         import docker
-        return docker.from_env()
+        return docker.from_env(timeout=int(os.getenv('DOCKER_API_TIMEOUT', '120')))
     except Exception:
         return None
 
@@ -126,6 +126,10 @@ MAP_REFRESH_SECONDS = int(os.getenv('MAP_REFRESH_SECONDS', '300'))
 MAP_CAPTURE_LOCK = threading.Lock()
 BACKUP_DIR = os.getenv('BACKUP_DIR', '/data/config/backup')
 BACKUP_LIMIT = 7
+IMAGE_SELECTION_FILE = os.getenv('OPENRCT2_IMAGE_FILE', '/data/config/.openrct2-image')
+IMAGE_REPOSITORY = 'openrct2/openrct2-cli'
+IMAGE_TAG_PATTERN = re.compile(r'^\d+\.\d+\.\d+$')
+IMAGE_REQUEST_TIMEOUT = 10
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_BYTES', str(1024 * 1024 * 1024)))
 
 MOCK_STATE = {
@@ -193,7 +197,7 @@ def bridge_call(payload):
 def docker_container():
     if docker is None:
         raise RuntimeError('docker SDK not installed')
-    client = docker.from_env()
+    client = docker.from_env(timeout=int(os.getenv('DOCKER_API_TIMEOUT', '120')))
     return client.containers.get(GAME_CONTAINER)
 
 def runtime_state():
@@ -207,7 +211,7 @@ def runtime_state():
         return 'stopped'
 
 def read_network_settings():
-    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server'}
+    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':''}
     if MOCK:
         values.update({'server_name': MOCK_STATE['server']['name'], 'server_description': MOCK_STATE['server']['description'], 'server_greeting':'Willkommen!', 'maxplayers': str(MOCK_STATE['server']['maxPlayers']), 'advertise':'false'})
         return values
@@ -216,14 +220,17 @@ def read_network_settings():
     cfg.read(CONFIG_FILE)
     if cfg.has_section('network'):
         for k in values:
-            if k == 'site_title': continue
+            if k in ('site_title', 'admin_footer_text', 'public_footer_text'): continue
             if cfg.has_option('network', k): values[k] = cfg.get('network', k).strip('"')
     if cfg.has_option('openrct2_admin', 'site_title'):
         values['site_title'] = cfg.get('openrct2_admin', 'site_title').strip('"')
+    for key in ('admin_footer_text', 'public_footer_text'):
+        if cfg.has_option('openrct2_admin', key):
+            values[key] = cfg.get('openrct2_admin', key).strip('"')
     return values
 
 def write_network_settings(payload):
-    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title'}
+    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text'}
     if MOCK:
         if 'server_name' in payload: MOCK_STATE['server']['name'] = str(payload['server_name'])[:64]
         if 'server_description' in payload: MOCK_STATE['server']['description'] = str(payload['server_description'])[:256]
@@ -236,9 +243,9 @@ def write_network_settings(payload):
     if not cfg.has_section('network'): cfg.add_section('network')
     for k,v in payload.items():
         if k not in allowed: continue
-        if k == 'site_title':
+        if k in ('site_title', 'admin_footer_text', 'public_footer_text'):
             if not cfg.has_section('openrct2_admin'): cfg.add_section('openrct2_admin')
-            cfg.set('openrct2_admin', k, str(v).replace('\n',' ')[:64])
+            cfg.set('openrct2_admin', k, str(v).replace('\n',' ')[:256])
             continue
         if k == 'maxplayers': v = str(max(1, min(255, int(v))))
         elif k == 'advertise': v = 'true' if str(v).lower() in ('1','true','yes','on') else 'false'
@@ -355,7 +362,7 @@ def state():
         'server': {
             'online': runtime == 'running',
             'state': runtime,
-            'version': f'OpenRCT2 {OPENRCT2_VERSION}',
+            'version': f'OpenRCT2 {selected_game_version()}',
             'name': settings.get('server_name') or 'OpenRCT2 Server',
             'description': settings.get('server_description', ''),
             'maxPlayers': int(settings.get('maxplayers') or 10),
@@ -364,6 +371,8 @@ def state():
         },
         'players': [],
         'siteTitle': settings.get('site_title') or 'OpenRCT2 Server',
+        'adminFooterText': settings.get('admin_footer_text', ''),
+        'publicFooterText': settings.get('public_footer_text', ''),
     }
     try:
         bridge_status = bridge_call({'cmd':'status'})
@@ -379,7 +388,7 @@ def state():
         'description': settings.get('server_description', ''),
         'maxPlayers': int(settings.get('maxplayers') or 10),
         'port': 11753,
-        'version': f'OpenRCT2 {OPENRCT2_VERSION}',
+        'version': f'OpenRCT2 {selected_game_version()}',
     })
     shot = os.path.join(SCREENSHOT_DIR, 'server-map.png')
     images = map_images()
@@ -581,6 +590,102 @@ def create_backup():
     for backup in backups[BACKUP_LIMIT:]:
         (backup_dir / backup['name']).unlink()
     return list_backups()
+
+def selected_game_image():
+    try:
+        image = pathlib.Path(IMAGE_SELECTION_FILE).read_text(encoding='utf-8').strip()
+        if image.startswith(IMAGE_REPOSITORY + ':') and IMAGE_TAG_PATTERN.fullmatch(image.rsplit(':', 1)[1]):
+            return image
+    except FileNotFoundError:
+        pass
+    return os.getenv('OPENRCT2_IMAGE', f'{IMAGE_REPOSITORY}:{OPENRCT2_VERSION}')
+
+def selected_game_version():
+    return selected_game_image().rsplit(':', 1)[-1]
+
+def available_game_versions():
+    url = f'https://hub.docker.com/v2/repositories/{IMAGE_REPOSITORY}/tags?page_size=100'
+    request_object = urllib.request.Request(url, headers={'Accept': 'application/json', 'User-Agent': 'openrct2-admin'})
+    try:
+        with urllib.request.urlopen(request_object, timeout=IMAGE_REQUEST_TIMEOUT) as response:
+            payload = json.load(response)
+    except Exception as error:
+        raise RuntimeError(f'Versionsliste konnte nicht geladen werden: {error}')
+    versions = sorted({item.get('name', '') for item in payload.get('results', []) if IMAGE_TAG_PATTERN.fullmatch(item.get('name', ''))}, key=lambda value: tuple(map(int, value.split('.'))), reverse=True)
+    if not versions:
+        raise RuntimeError('Keine stabilen OpenRCT2-Versionen gefunden')
+    return versions
+
+def _game_container_definition(container):
+    container.reload()
+    attrs = container.attrs
+    config = attrs['Config']
+    networks = attrs['NetworkSettings'].get('Networks') or {}
+    client = container.client
+    networking_config = client.api.create_networking_config({name: client.api.create_endpoint_config(aliases=settings.get('Aliases')) for name, settings in networks.items()}) if networks else None
+    return {
+        'was_running': container.status == 'running', 'image': config['Image'],
+        'kwargs': {
+            'hostname': config.get('Hostname'), 'user': config.get('User'), 'tty': config.get('Tty'),
+            'open_stdin': config.get('OpenStdin'), 'stdin_once': config.get('StdinOnce'), 'environment': config.get('Env'),
+            'labels': config.get('Labels'), 'stop_signal': config.get('StopSignal'), 'stop_timeout': config.get('StopTimeout'),
+            'healthcheck': config.get('Healthcheck'), 'entrypoint': config.get('Entrypoint'), 'working_dir': config.get('WorkingDir'),
+            'host_config': attrs['HostConfig'], 'networking_config': networking_config,
+        }
+    }
+
+def _recreate_game_container(image, definition):
+    client = _docker_client()
+    if not client:
+        raise RuntimeError('Docker API unavailable')
+    try:
+        container = client.containers.get(GAME_CONTAINER)
+        container.reload()
+        if container.status == 'running':
+            container.stop(timeout=30)
+        container.remove()
+    except docker.errors.NotFound:
+        pass
+    created = client.api.create_container(image=image, name=GAME_CONTAINER, **definition['kwargs'])
+    replacement = client.containers.get(created['Id'])
+    if definition['was_running']:
+        replacement.start()
+        time.sleep(2)
+        replacement.reload()
+        if replacement.status != 'running':
+            raise RuntimeError(f'Container start failed: {replacement.status}')
+    return definition['was_running']
+
+def update_game_image(version):
+    if not isinstance(version, str) or not IMAGE_TAG_PATTERN.fullmatch(version):
+        raise ValueError('Ungültige OpenRCT2-Version')
+    if version not in available_game_versions():
+        raise ValueError('Version ist nicht als stabile openrct2-cli-Version verfügbar')
+    client = _docker_client()
+    if not client:
+        raise RuntimeError('Docker API unavailable')
+    target_image = f'{IMAGE_REPOSITORY}:{version}'
+    try:
+        definition = _game_container_definition(client.containers.get(GAME_CONTAINER))
+        create_backup()
+        client.images.pull(target_image)
+        was_running = _recreate_game_container(target_image, definition)
+        path = pathlib.Path(IMAGE_SELECTION_FILE)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix('.tmp')
+        temporary.write_text(target_image + '\n', encoding='utf-8')
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+        return {'image': target_image, 'restarted': was_running}
+    except Exception as error:
+        try:
+            if 'definition' not in locals():
+                raise RuntimeError('Vorherige Container-Konfiguration konnte nicht gelesen werden')
+            client.images.pull(definition['image'])
+            _recreate_game_container(definition['image'], definition)
+        except Exception as rollback_error:
+            raise RuntimeError(f'Update fehlgeschlagen ({error}); Rollback fehlgeschlagen: {rollback_error}')
+        raise RuntimeError(f'Update fehlgeschlagen; vorheriger Container wurde wiederhergestellt: {error}')
 
 def restore_backup(name):
     name = pathlib.Path(name).name
@@ -791,6 +896,25 @@ def api_backup_restore(name):
     except Exception as error:
         return jsonify({'ok': False, 'error': str(error)}), 400
 
+@app.get('/api/openrct2/versions')
+@require_admin
+def api_openrct2_versions():
+    try:
+        return jsonify({'ok': True, 'current': selected_game_image(), 'versions': available_game_versions()})
+    except Exception as error:
+        return jsonify({'ok': False, 'error': str(error)}), 503
+
+@app.post('/api/openrct2/update')
+@require_admin
+def api_openrct2_update():
+    payload = request.get_json(force=True) or {}
+    if payload.get('confirm') is not True:
+        return jsonify({'ok': False, 'error': 'Update muss bestätigt werden'}), 400
+    try:
+        return jsonify({'ok': True, **update_game_image(payload.get('version'))})
+    except (ValueError, RuntimeError) as error:
+        return jsonify({'ok': False, 'error': str(error)}), 400
+
 @app.post('/api/maps/refresh')
 @require_admin
 def api_maps_refresh():
@@ -825,15 +949,23 @@ def get_settings(): return jsonify(read_network_settings())
 @app.post('/api/server/settings')
 @require_admin
 def set_settings():
+    payload = request.get_json(force=True) or {}
+    game_settings = {'server_name', 'server_description', 'server_greeting', 'maxplayers', 'advertise', 'default_password'}
+    was_running = False
     try:
-        was_running = not MOCK and CONTROL_MODE == 'docker' and runtime_state() == 'running'
+        was_running = bool(set(payload) & game_settings) and not MOCK and CONTROL_MODE == 'docker' and runtime_state() == 'running'
         if was_running:
             docker_container().stop(timeout=20)
-        settings = write_network_settings(request.get_json(force=True) or {})
+        settings = write_network_settings(payload)
         if was_running:
             docker_container().start()
         return jsonify({'ok': True, 'settings': settings, 'restarted': was_running})
     except Exception as e:
+        if was_running and runtime_state() != 'running':
+            try:
+                docker_container().start()
+            except Exception:
+                pass
         return jsonify({'ok':False,'error':str(e)}),400
 
 @app.get('/api/setup')
@@ -945,6 +1077,7 @@ def api_dashboard():
         'settings': read_network_settings(),
         'setup': setup_status(),
         'backups': list_backups(),
+        'image': selected_game_image(),
     })
 
 

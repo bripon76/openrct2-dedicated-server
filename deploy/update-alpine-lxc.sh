@@ -14,6 +14,15 @@ if [ ! -f "${PROJECT_DIR}/.env" ]; then
 fi
 
 cd "${PROJECT_DIR}"
+if [ -f data/config/.openrct2-image ]; then
+    OPENRCT2_IMAGE=$(tr -d '\r\n' < data/config/.openrct2-image)
+    if printf '%s\n' "${OPENRCT2_IMAGE}" | grep -Eq '^openrct2/openrct2-cli:[0-9]+\.[0-9]+\.[0-9]+$'; then
+        export OPENRCT2_IMAGE
+    else
+        echo "Ignoring invalid persisted OpenRCT2 image."
+        unset OPENRCT2_IMAGE
+    fi
+fi
 was_running=false
 if docker inspect -f '{{.State.Running}}' openrct2-server 2>/dev/null | grep -qx true; then
     was_running=true

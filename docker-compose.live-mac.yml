@@ -18,7 +18,7 @@ services:
       ACTIVE_SAVE_FILE: "/data/config/save/.active-save"
       RCT2_DATA_DIR: "/data/rct2"
       SCREENSHOT_DIR: "/data/config/screenshot"
-      OPENRCT2_VERSION: "0.5.5"
+      OPENRCT2_IMAGE: "${OPENRCT2_IMAGE:-openrct2/openrct2-cli:0.5.5}"
       MAP_REFRESH_SECONDS: "300"
       PUBLIC_HOST: "${PUBLIC_HOST:-openrct2.example.com}"
     volumes:
@@ -27,7 +27,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   openrct2:
-    image: openrct2/openrct2-cli:0.5.5
+    image: "${OPENRCT2_IMAGE:-openrct2/openrct2-cli:0.5.5}"
     platform: linux/amd64
     container_name: openrct2-server
     restart: unless-stopped
