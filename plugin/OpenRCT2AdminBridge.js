@@ -6,6 +6,8 @@ const PERMISSIONS = [
   'scenery','path','clear_landscape','guest','staff','park_properties','park_funding','kick_player','modify_groups',
   'set_player_group','cheat','toggle_scenery_cluster','passwordless_login','modify_tile','edit_scenario_options'
 ];
+const MODERATOR_PERMISSIONS = PERMISSIONS.filter(permission => !['passwordless_login', 'set_player_group'].includes(permission));
+const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 function result(ok, extra) { return Object.assign({ ok: ok }, extra || {}); }
 function captureMap() {
   return result(false, { error:'Headless captureImage is unavailable; use the CLI capture service.' });
@@ -15,12 +17,25 @@ function status() {
   return {
     ok: true,
     server: { online: network.mode === 'server', version: 'OpenRCT2', park: park.name || 'current park', port: 11753 },
+    parkStats: { guests: park.guests, cash: park.cash, rating: park.rating, value: park.value, companyValue: park.companyValue, admissions: park.totalAdmissions, admissionIncome: park.totalIncomeFromAdmissions },
     defaultGroup: network.defaultGroup,
     groups: network.groups.map(g => ({ id: g.id, name: g.name, permissions: g.permissions.slice() })),
     players: network.players.filter(p => !localPlayer || p.id !== localPlayer.id).map(p => ({ id:p.id, name:p.name, group:p.group, ping:p.ping, commandsRan:p.commandsRan, moneySpent:p.moneySpent }))
   };
 }
 function exec(action, args) { return new Promise(resolve => context.executeAction(action, args, r => resolve(r))); }
+async function ensureModeratorGroup() {
+  let group = network.groups.find(item => item.name === 'Moderator') || network.groups.find(item => /^Group #\d+$/.test(item.name));
+  if (!group) {
+    network.addGroup();
+    await delay(500);
+    group = network.groups.find(item => item.name === 'Group #' + (network.numGroups - 1));
+  }
+  if (group) {
+    group.name = 'Moderator';
+    group.permissions = MODERATOR_PERMISSIONS.slice();
+  }
+}
 async function command(q) {
   if (network.mode !== 'server') return result(false,{error:'not running as multiplayer server'});
   switch(q.cmd) {
@@ -35,13 +50,14 @@ async function command(q) {
     }
     case 'remove_group': network.removeGroup(Number(q.groupId)); return result(true);
     case 'set_default_group': network.defaultGroup=Number(q.groupId); return result(true);
-    case 'rename_group': { const g=network.groups.find(group=>Number(group.id)===Number(q.groupId)); if(!g)return result(false,{error:'group not found'}); g.name=String(q.name||'').slice(0,64); return result(true); }
-    case 'set_group_permissions': { const g=network.groups.find(group=>Number(group.id)===Number(q.groupId)); if(!g)return result(false,{error:'group not found'}); g.permissions=(Array.isArray(q.permissions)?q.permissions:[]).filter(p=>PERMISSIONS.includes(p)); return result(true,{permissions:g.permissions.slice()}); }
+    case 'rename_group': { const g=network.groups.find(group=>Number(group.id)===Number(q.groupId)); if(!g)return result(false,{error:'group not found'}); g.name=String(q.name||'').slice(0,64); await delay(250); return result(true); }
+    case 'set_group_permissions': { const g=network.groups.find(group=>Number(group.id)===Number(q.groupId)); if(!g)return result(false,{error:'group not found'}); g.permissions=(Array.isArray(q.permissions)?q.permissions:[]).filter(p=>PERMISSIONS.includes(p)); await delay(250); return result(true); }
     default: return result(false,{error:'unknown command'});
   }
 }
 function main() {
   if (network.mode !== 'server') { console.log('[AdminBridge] inactive: not a server'); return; }
+  ensureModeratorGroup().catch(error => console.log('[AdminBridge] moderator setup failed: ' + error));
   const listener=network.createListener();
   listener.on('connection',sock=>{let buf='';sock.on('data',data=>{buf+=data;let i;while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i);buf=buf.slice(i+1);if(!line.trim())continue;let q;try{q=JSON.parse(line)}catch(e){sock.write(JSON.stringify(result(false,{error:'invalid json'}))+'\n');continue}command(q).then(r=>sock.write(JSON.stringify(r)+'\n')).catch(e=>sock.write(JSON.stringify(result(false,{error:String(e)}))+'\n'));}})});
   listener.listen(11754,'127.0.0.1');
