@@ -11,6 +11,18 @@ Webverwaltung fuer einen dedizierten OpenRCT2-Multiplayerserver. Der Quellcode w
 
 Port `11754` bleibt innerhalb des Gameserver-Containers und wird nicht veroeffentlicht.
 
+## Funktionen
+
+- Admin- und Public-Oberflaeche im OpenRCT2-Parkdesign mit lokal versioniertem Logo.
+- Erststart-Wizard fuer Originaldaten, Spielstand und Servereinstellungen.
+- Save-Upload, Auswahl, Loeschschutz des aktiven Saves und Backups.
+- Start, Stopp, Neustart, aufklappbare Containerlogs und Preflight-Schutz.
+- Parkansichten aus dem neuesten Autosave mit oeffentlicher Freigabe und Vollbildansicht.
+- Gruppen- und Rechteverwaltung; Moderatorprofil ohne `passwordless_login` und `set_player_group`.
+- Live-Parkdaten fuer Besucher, Geld, Werte und Parkrating; getrennt fuer die Public-Seite freigebbar.
+- Optionaler Public-Infobereich, frei konfigurierbare Footer, Serveradresse und Branding-Upload.
+- Manuelle Auswahl stabiler OpenRCT2-Container-Versionen mit Backup und Rollback.
+
 ## Alpine-LXC Voraussetzungen
 
 - Alpine-LXC mit aktiviertem Docker-Nesting, mindestens 2 vCPU und 2 GB RAM.
@@ -105,6 +117,19 @@ docker compose -f docker-compose.live-mac.yml --profile game create openrct2
 
 Das Interface ist unter `http://localhost:8088/admin` erreichbar.
 
+Zum lokalen Testen des laufenden Gameservers:
+
+```text
+OpenRCT2-Client: localhost:11753
+```
+
+Aktuelle Containerlogs:
+
+```sh
+docker compose -f docker-compose.live-mac.yml logs -f admin
+docker compose -f docker-compose.live-mac.yml logs -f openrct2
+```
+
 ## Multiplayer und mehrere Parks
 
 Ein OpenRCT2-Gameserver hostet genau einen geladenen Park, kann aber mehrere Spieler gleichzeitig in diesem Park aufnehmen. Der aktuelle Admin verwaltet deshalb eine Gameserver-Instanz und einen aktiven Spielstand.
@@ -123,6 +148,8 @@ Alternativ koennen mehrere Compose-Projekte in einem LXC betrieben werden. Dafue
 ## Laufzeitdaten
 
 `data/` und `.env` sind absichtlich von Git ausgeschlossen. Sie enthalten urheberrechtlich geschuetzte RCT2-Dateien, Spielstaende, Backups, Screenshots sowie Secrets und duerfen nicht committed werden.
+
+Auch hochgeladene Logos und Webeinstellungen liegen ausschliesslich unter `data/config/` und werden nicht versioniert.
 
 ## Pruefungen
 
