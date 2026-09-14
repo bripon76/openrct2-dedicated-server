@@ -1,6 +1,10 @@
 # OpenRCT2 Server Admin
 
+<p align="center"><img src="admin/static/openrct2-server-logo.png" alt="OpenRCT2 Server" width="260"></p>
+
 Webverwaltung fuer einen dedizierten OpenRCT2-Multiplayerserver. Der Quellcode wird aus Git installiert; Originaldaten, Spielstaende, Backups und Zugangsdaten bleiben ausschliesslich im LXC.
+
+Eine statische Design-Vorschau liegt unter [`docs/demo.html`](docs/demo.html). Fuer GitHub Pages den Ordner `docs/` als Verzeichnis der Pages-Quelle aktivieren.
 
 ## Dienste
 
