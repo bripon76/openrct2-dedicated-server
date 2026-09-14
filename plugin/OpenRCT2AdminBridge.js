@@ -6,6 +6,7 @@ const PERMISSIONS = [
   'scenery','path','clear_landscape','guest','staff','park_properties','park_funding','kick_player','modify_groups',
   'set_player_group','cheat','toggle_scenery_cluster','passwordless_login','modify_tile','edit_scenario_options'
 ];
+const MODERATOR_PERMISSIONS = PERMISSIONS.filter(permission => !['passwordless_login', 'set_player_group'].includes(permission));
 function result(ok, extra) { return Object.assign({ ok: ok }, extra || {}); }
 function captureMap() {
   return result(false, { error:'Headless captureImage is unavailable; use the CLI capture service.' });
@@ -21,6 +22,18 @@ function status() {
   };
 }
 function exec(action, args) { return new Promise(resolve => context.executeAction(action, args, r => resolve(r))); }
+function ensureModeratorGroup() {
+  let group = network.groups.find(item => item.name === 'Moderator');
+  if (!group) {
+    const before = network.groups.map(item => item.id);
+    network.addGroup();
+    group = network.groups.find(item => !before.includes(item.id));
+  }
+  if (group) {
+    group.name = 'Moderator';
+    group.permissions = MODERATOR_PERMISSIONS.slice();
+  }
+}
 async function command(q) {
   if (network.mode !== 'server') return result(false,{error:'not running as multiplayer server'});
   switch(q.cmd) {
@@ -42,6 +55,7 @@ async function command(q) {
 }
 function main() {
   if (network.mode !== 'server') { console.log('[AdminBridge] inactive: not a server'); return; }
+  ensureModeratorGroup();
   const listener=network.createListener();
   listener.on('connection',sock=>{let buf='';sock.on('data',data=>{buf+=data;let i;while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i);buf=buf.slice(i+1);if(!line.trim())continue;let q;try{q=JSON.parse(line)}catch(e){sock.write(JSON.stringify(result(false,{error:'invalid json'}))+'\n');continue}command(q).then(r=>sock.write(JSON.stringify(r)+'\n')).catch(e=>sock.write(JSON.stringify(result(false,{error:String(e)}))+'\n'));}})});
   listener.listen(11754,'127.0.0.1');
