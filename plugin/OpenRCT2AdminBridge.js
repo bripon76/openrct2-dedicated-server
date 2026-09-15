@@ -18,6 +18,7 @@ function status() {
     ok: true,
     server: { online: network.mode === 'server', version: 'OpenRCT2', park: park.name || 'current park', port: 11753 },
     parkStats: { guests: park.guests, cash: park.cash, rating: park.rating, value: park.value, companyValue: park.companyValue, admissions: park.totalAdmissions, admissionIncome: park.totalIncomeFromAdmissions },
+    announcements: (park.messages || []).slice(-10).map(message => ({ type: message.type, text: message.text, subject: message.subject })),
     defaultGroup: network.defaultGroup,
     groups: network.groups.map(g => ({ id: g.id, name: g.name, permissions: g.permissions.slice() })),
     players: network.players.filter(p => !localPlayer || p.id !== localPlayer.id).map(p => ({ id:p.id, name:p.name, group:p.group, ping:p.ping, commandsRan:p.commandsRan, moneySpent:p.moneySpent }))
