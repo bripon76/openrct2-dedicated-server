@@ -218,7 +218,7 @@ def read_web_settings():
         raw = json.loads(pathlib.Path(WEB_SETTINGS_FILE).read_text(encoding='utf-8'))
         if not isinstance(raw, dict):
             return {}
-        keys = ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats')
+        keys = ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements')
         return {key: str(raw[key]).replace('\r', '')[:1000] for key in keys if key in raw}
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
@@ -234,7 +234,7 @@ def write_web_settings(values):
     os.replace(temporary, path)
 
 def read_network_settings():
-    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':'', 'server_address':'', 'public_info_title':'', 'public_info_text':'', 'public_show_server_details':'true', 'public_show_park_views':'true', 'public_show_players':'true', 'public_show_park_stats':'true'}
+    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':'', 'server_address':'', 'public_info_title':'', 'public_info_text':'', 'public_show_server_details':'true', 'public_show_park_views':'true', 'public_show_players':'true', 'public_show_park_stats':'true', 'public_show_announcements':'false'}
     if MOCK:
         values.update({'server_name': MOCK_STATE['server']['name'], 'server_description': MOCK_STATE['server']['description'], 'server_greeting':'Willkommen!', 'maxplayers': str(MOCK_STATE['server']['maxPlayers']), 'advertise':'false'})
         return values
@@ -245,19 +245,19 @@ def read_network_settings():
     cfg.read(CONFIG_FILE)
     if cfg.has_section('network'):
         for k in values:
-            if k in ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats'): continue
+            if k in ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements'): continue
             if cfg.has_option('network', k): values[k] = cfg.get('network', k).strip('"')
     if cfg.has_option('openrct2_admin', 'site_title'):
         values['site_title'] = cfg.get('openrct2_admin', 'site_title').strip('"')
-    for key in ('admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats'):
+    for key in ('admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements'):
         if cfg.has_option('openrct2_admin', key):
             values[key] = cfg.get('openrct2_admin', key).strip('"')
     values.update(read_web_settings())
     return values
 
 def write_network_settings(payload):
-    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text','server_address','public_info_title','public_info_text','public_show_server_details','public_show_park_views','public_show_players','public_show_park_stats'}
-    web_keys = {'site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats'}
+    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text','server_address','public_info_title','public_info_text','public_show_server_details','public_show_park_views','public_show_players','public_show_park_stats','public_show_announcements'}
+    web_keys = {'site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements'}
     if MOCK:
         if 'server_name' in payload: MOCK_STATE['server']['name'] = str(payload['server_name'])[:64]
         if 'server_description' in payload: MOCK_STATE['server']['description'] = str(payload['server_description'])[:256]
@@ -428,6 +428,7 @@ def state():
         'publicShowParkViews': str(settings.get('public_show_park_views', 'true')).lower() == 'true',
         'publicShowPlayers': str(settings.get('public_show_players', 'true')).lower() == 'true',
         'publicShowParkStats': str(settings.get('public_show_park_stats', 'true')).lower() == 'true',
+        'publicShowAnnouncements': str(settings.get('public_show_announcements', 'false')).lower() == 'true',
     }
     try:
         bridge_status = bridge_call({'cmd':'status'})
@@ -1009,6 +1010,24 @@ def api_status():
     try: return jsonify(state())
     except Exception as e: return jsonify({'error': str(e), 'mock': False, 'server': {'online':False,'state':runtime_state()}}), 503
 
+@app.get('/api/public-status')
+def api_public_status():
+    try:
+        out = state()
+        # Public switches limit the response as well as the visible page.
+        out.pop('groups', None)
+        out.pop('defaultGroup', None)
+        out.pop('parkControls', None)
+        if not out.get('publicShowPlayers'):
+            out['players'] = []
+        if not out.get('publicShowParkStats'):
+            out.pop('parkStats', None)
+        if not out.get('publicShowAnnouncements'):
+            out.pop('announcements', None)
+        return jsonify(out)
+    except Exception as e:
+        return jsonify({'error': str(e), 'mock': False, 'server': {'online':False,'state':runtime_state()}}), 503
+
 @app.get('/api/events')
 def api_events():
     @stream_with_context
@@ -1128,6 +1147,21 @@ def server_logs():
 @require_admin
 def api_action():
     payload = request.get_json(force=True) or {}; cmd = payload.get('cmd')
+    park_properties = {'cash', 'bankLoan', 'maxBankLoan', 'entranceFee', 'suggestedGuestMaximum', 'guestGenerationProbability', 'guestInitialCash', 'guestInitialHappiness', 'guestInitialHunger', 'guestInitialThirst', 'landPrice', 'constructionRightsPrice'}
+    park_flags = {'open', 'samePriceInPark', 'freeEntry', 'difficultGuestGeneration', 'difficultParkRating'}
+    confirmed = {'send_message', 'post_park_message', 'set_park_property', 'set_guest_generation', 'set_park_flag', 'clear_awards', 'grant_award'}
+    if cmd in confirmed and payload.get('confirm') is not True:
+        return jsonify({'ok': False, 'error': 'Aktion muss bestätigt werden'}), 400
+    if cmd in ('send_message', 'post_park_message') and (not isinstance(payload.get('message'), str) or not payload['message'].strip() or len(payload['message']) > 240):
+        return jsonify({'ok': False, 'error': 'Nachricht muss 1 bis 240 Zeichen enthalten'}), 400
+    if cmd == 'set_park_property' and (payload.get('property') not in park_properties or type(payload.get('value')) is not int or not -1000000000 <= payload['value'] <= 1000000000):
+        return jsonify({'ok': False, 'error': 'Ungültige Parkeigenschaft'}), 400
+    if cmd == 'set_guest_generation' and (type(payload.get('probability')) is not int or not 0 <= payload['probability'] <= 1000 or type(payload.get('suggestedMaximum')) is not int or not 0 <= payload['suggestedMaximum'] <= 100000):
+        return jsonify({'ok': False, 'error': 'Ungültige Besuchergenerierung'}), 400
+    if cmd == 'set_park_flag' and (payload.get('flag') not in park_flags or type(payload.get('value')) is not bool):
+        return jsonify({'ok': False, 'error': 'Ungültige Parkflagge'}), 400
+    if cmd == 'grant_award' and (type(payload.get('awardType')) is not int or not 0 <= payload['awardType'] <= 255):
+        return jsonify({'ok': False, 'error': 'Ungültige Auszeichnung'}), 400
     if MOCK:
         if cmd == 'set_player_group':
             p = next((x for x in MOCK_STATE['players'] if x['id'] == int(payload['playerId'])), None)

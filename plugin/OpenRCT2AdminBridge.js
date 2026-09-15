@@ -7,8 +7,17 @@ const PERMISSIONS = [
   'set_player_group','cheat','toggle_scenery_cluster','passwordless_login','modify_tile','edit_scenario_options'
 ];
 const MODERATOR_PERMISSIONS = PERMISSIONS.filter(permission => !['passwordless_login', 'set_player_group'].includes(permission));
+const PARK_PROPERTIES = [
+  'cash', 'bankLoan', 'maxBankLoan', 'entranceFee', 'suggestedGuestMaximum',
+  'guestGenerationProbability', 'guestInitialCash', 'guestInitialHappiness',
+  'guestInitialHunger', 'guestInitialThirst', 'landPrice', 'constructionRightsPrice'
+];
+const PARK_FLAGS = ['open', 'samePriceInPark', 'freeEntry', 'difficultGuestGeneration', 'difficultParkRating'];
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 function result(ok, extra) { return Object.assign({ ok: ok }, extra || {}); }
+function supportedProperty(name) {
+  return PARK_PROPERTIES.includes(name) && typeof park[name] === 'number';
+}
 function captureMap() {
   return result(false, { error:'Headless captureImage is unavailable; use the CLI capture service.' });
 }
@@ -17,11 +26,25 @@ function status() {
   return {
     ok: true,
     server: { online: network.mode === 'server', version: 'OpenRCT2', park: park.name || 'current park', port: 11753 },
-    parkStats: { guests: park.guests, cash: park.cash, rating: park.rating, value: park.value, companyValue: park.companyValue, admissions: park.totalAdmissions, admissionIncome: park.totalIncomeFromAdmissions },
+    parkStats: {
+      cash: park.cash, rating: park.rating, bankLoan: park.bankLoan, maxBankLoan: park.maxBankLoan,
+      entranceFee: park.entranceFee, guests: park.guests, suggestedGuestMaximum: park.suggestedGuestMaximum,
+      guestGenerationProbability: park.guestGenerationProbability, guestInitialCash: park.guestInitialCash,
+      guestInitialHappiness: park.guestInitialHappiness, guestInitialHunger: park.guestInitialHunger,
+      guestInitialThirst: park.guestInitialThirst, value: park.value, companyValue: park.companyValue,
+      totalRideValueForMoney: park.totalRideValueForMoney, totalAdmissions: park.totalAdmissions,
+      totalIncomeFromAdmissions: park.totalIncomeFromAdmissions, landPrice: park.landPrice,
+      constructionRightsPrice: park.constructionRightsPrice, parkSize: park.parkSize,
+      research: park.research, casualtyPenalty: park.casualtyPenalty,
+      awards: park.awards || [], monthlyExpenditureAvailable: typeof park.getMonthlyExpenditure === 'function',
+      flags: PARK_FLAGS.reduce((flags, flag) => { try { flags[flag] = park.getFlag(flag); } catch (_) {} return flags; }, {})
+    },
     announcements: (park.messages || []).slice(-10).map(message => ({ type: message.type, text: message.text, subject: message.subject })),
     defaultGroup: network.defaultGroup,
     groups: network.groups.map(g => ({ id: g.id, name: g.name, permissions: g.permissions.slice() })),
-    players: network.players.filter(p => !localPlayer || p.id !== localPlayer.id).map(p => ({ id:p.id, name:p.name, group:p.group, ping:p.ping, commandsRan:p.commandsRan, moneySpent:p.moneySpent }))
+    players: network.players.filter(p => !localPlayer || p.id !== localPlayer.id).map(p => ({ id:p.id, name:p.name, group:p.group, ping:p.ping, commandsRan:p.commandsRan, moneySpent:p.moneySpent })),
+    // OpenRCT2 0.5.5 remote plugins expose these values but reject direct game-state writes.
+    parkControls: { readableProperties: PARK_PROPERTIES.filter(supportedProperty), propertyWrites:false, guestGeneration:false, flags:false, awards:false, parkMessages:false, propertyWriteReason:'OpenRCT2 remote plugins do not allow direct game-state writes.' }
   };
 }
 function exec(action, args) { return new Promise(resolve => context.executeAction(action, args, r => resolve(r))); }
@@ -45,6 +68,24 @@ async function command(q) {
     case 'kick_player': network.kickPlayer(Number(q.playerId)); return result(true);
     case 'set_player_group': { const r=await exec('playersetgroup',{playerId:Number(q.playerId),groupId:Number(q.groupId)}); return result(!r.error,{actionResult:r}); }
     case 'send_message': network.sendMessage(String(q.message || '').slice(0,240)); return result(true);
+    case 'post_park_message': {
+      return result(false, { error:'OpenRCT2 remote plugins do not allow park messages' });
+    }
+    case 'set_park_property': {
+      return result(false, { error:'OpenRCT2 remote plugins do not allow direct park-property writes' });
+    }
+    case 'set_guest_generation': {
+      return result(false, { error:'OpenRCT2 remote plugins do not allow guest-generation writes' });
+    }
+    case 'set_park_flag': {
+      return result(false, { error:'OpenRCT2 remote plugins do not allow park-flag writes' });
+    }
+    case 'clear_awards': {
+      return result(false, { error:'OpenRCT2 remote plugins do not allow award changes' });
+    }
+    case 'grant_award': {
+      return result(false, { error:'OpenRCT2 remote plugins do not allow award changes' });
+    }
     case 'add_group': {
       const before=network.groups.map(g=>g.id); network.addGroup(); const g=network.groups.find(x=>!before.includes(x.id));
       if(g&&q.name) g.name=String(q.name).slice(0,64); return result(true,{group:g?{id:g.id,name:g.name}:null});
@@ -64,4 +105,4 @@ function main() {
   listener.listen(11754,'127.0.0.1');
   console.log('[AdminBridge] listening on 127.0.0.1:11754; map capture is handled by the CLI service');
 }
-registerPlugin({name:'OpenRCT2 Admin Bridge',version:'0.3.0',authors:['OpenRCT2 Admin'],type:'remote',licence:'MIT',targetApiVersion:77,main});
+registerPlugin({name:'OpenRCT2 Admin Bridge',version:'0.4.0',authors:['OpenRCT2 Admin'],type:'remote',licence:'MIT',targetApiVersion:77,main});

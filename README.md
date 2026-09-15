@@ -21,12 +21,17 @@ Die lokale Admin-Bridge verwendet `127.0.0.1:11754` innerhalb des Gameserver-Con
 - Ersteinrichtung fuer RCT2-Originaldaten, Savegame und Servereinstellungen.
 - Save-Upload, Aktivierung, sicherer Loeschschutz des aktiven Saves und Tagesbackups.
 - Serverstart, Stopp, Neustart, Preflight, aufklappbare Containerlogs und Parkansichten.
-- Public-Freigaben fuer Serverdetails, Spieler, Parkansichten und Live-Parkdaten.
+- Separate Public-Freigaben fuer Serverdetails, Spieler, Parkansichten, Live-Parkdaten und Live-Ankuendigungen.
 - Gruppen- und Rechteverwaltung mit sicherem Moderatorprofil ohne `passwordless_login` und `set_player_group`.
-- Live-Parkdaten: Besucher, Bargeld, Parkwert, Firmenwert, Rating, Eintritte und Eintrittseinnahmen.
-- Live-Ankuendigungen aus OpenRCT2, etwa Ride-Breakdowns und Warnungen, ueber die Bridge verfuegbar.
+- Live-Parkdaten: Besucher, Finanzen, Kredit, Eintritt und Preise, Park- und Firmenwert, Rating, Eintritte, Besuchergenerierung, Parkgroesse, Forschung, Auszeichnungen und Parkflags.
+- Live-Ankuendigungen aus OpenRCT2, etwa Ride-Breakdowns und Warnungen, sind im Admin sichtbar und bei aktivierter Freigabe auch auf der Public-Seite.
+- Admin-Aktionen mit expliziter Bestaetigung: Nachricht an alle verbundenen Spieler; weitere Parksteuerungen werden nur aktiviert, wenn die verwendete OpenRCT2-Version sie fuer Remote-Plugins freigibt.
 - Optionaler Public-Infobereich, konfigurierbare Footer, Serveradresse und Branding-Upload.
 - Manuelle Auswahl stabiler OpenRCT2-Container-Versionen mit Backup und Rollback.
+
+### OpenRCT2-Grenzen
+
+OpenRCT2 `0.5.5` erlaubt Remote-Plugins das Lesen der genannten Parkdaten und das Senden einer Servernachricht. Direkte Aenderungen von Parkeigenschaften, Besuchergenerierung, Parkflags, Auszeichnungen und Parknachrichten werden von dieser Version mit `Game state is not mutable in this context` abgewiesen. Die Verwaltung zeigt diese Funktionen deshalb deaktiviert an, statt nicht wirksame Aenderungen vorzuspiegeln.
 
 ## Datenschutz und Git
 
