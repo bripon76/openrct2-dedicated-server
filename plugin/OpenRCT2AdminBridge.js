@@ -44,7 +44,7 @@ function status() {
     groups: network.groups.map(g => ({ id: g.id, name: g.name, permissions: g.permissions.slice() })),
     players: network.players.filter(p => !localPlayer || p.id !== localPlayer.id).map(p => ({ id:p.id, name:p.name, group:p.group, ping:p.ping, commandsRan:p.commandsRan, moneySpent:p.moneySpent })),
     // OpenRCT2 0.5.5 remote plugins expose these values but reject direct game-state writes.
-    parkControls: { readableProperties: PARK_PROPERTIES.filter(supportedProperty), propertyWrites:false, guestGeneration:false, flags:false, awards:false, parkMessages:false, propertyWriteReason:'OpenRCT2 remote plugins do not allow direct game-state writes.' }
+    parkControls: { readableProperties: PARK_PROPERTIES.filter(supportedProperty), propertyWrites:false, guestGeneration:false, flags:false, awards:false, parkMessages:false, propertyWriteReason:'OpenRCT2 0.5.5 erlaubt Remote-Plugins nur das Lesen von Parkdaten. Servernachrichten funktionieren; Parkwerte, Flags, Auszeichnungen und Parknachrichten sind technisch gesperrt.' }
   };
 }
 function exec(action, args) { return new Promise(resolve => context.executeAction(action, args, r => resolve(r))); }
