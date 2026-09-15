@@ -2,41 +2,48 @@
 
 <p align="center"><img src="admin/static/openrct2-server-logo.png" alt="OpenRCT2 Server" width="260"></p>
 
-Webverwaltung fuer einen dedizierten OpenRCT2-Multiplayerserver. Der Quellcode wird aus Git installiert; Originaldaten, Spielstaende, Backups und Zugangsdaten bleiben ausschliesslich im LXC.
+Webverwaltung fuer einen dedizierten OpenRCT2-Multiplayerserver. Der Quellcode wird aus Git installiert; Spielinhalte und Zugangsdaten werden ausschliesslich ueber den Wizard oder den Adminbereich in die lokale Laufzeitumgebung eingebracht.
 
-Eine statische Design-Vorschau liegt unter [`docs/demo.html`](docs/demo.html). Fuer GitHub Pages den Ordner `docs/` als Verzeichnis der Pages-Quelle aktivieren.
+Eine statische Design-Vorschau liegt unter [`docs/demo.html`](docs/demo.html). Fuer GitHub Pages den Ordner `docs/` als Pages-Quelle aktivieren.
 
-## Dienste
+## Architektur
 
 | Dienst | Aufgabe | Port |
 | --- | --- | --- |
-| `admin` | Webinterface, API und Docker-Steuerung | `8088/tcp` |
+| `admin` | Flask-Admin, Public-Seite, API und Docker-Steuerung | `8088/tcp` |
 | `openrct2` | OpenRCT2-Multiplayerserver | `11753/tcp` |
 
-Port `11754` bleibt innerhalb des Gameserver-Containers und wird nicht veroeffentlicht.
+Die lokale Admin-Bridge verwendet `127.0.0.1:11754` innerhalb des Gameserver-Containers. Dieser Port wird nie veroeffentlicht.
 
 ## Funktionen
 
-- Admin- und Public-Oberflaeche im OpenRCT2-Parkdesign mit lokal versioniertem Logo.
-- Erststart-Wizard fuer Originaldaten, Spielstand und Servereinstellungen.
-- Save-Upload, Auswahl, Loeschschutz des aktiven Saves und Backups.
-- Start, Stopp, Neustart, aufklappbare Containerlogs und Preflight-Schutz.
-- Parkansichten aus dem neuesten Autosave mit oeffentlicher Freigabe und Vollbildansicht.
-- Gruppen- und Rechteverwaltung; Moderatorprofil ohne `passwordless_login` und `set_player_group`.
-- Live-Parkdaten fuer Besucher, Geld, Werte und Parkrating; getrennt fuer die Public-Seite freigebbar.
-- Optionaler Public-Infobereich, frei konfigurierbare Footer, Serveradresse und Branding-Upload.
+- Responsive Admin- und Public-Oberflaeche im OpenRCT2-Parkdesign.
+- Ersteinrichtung fuer RCT2-Originaldaten, Savegame und Servereinstellungen.
+- Save-Upload, Aktivierung, sicherer Loeschschutz des aktiven Saves und Tagesbackups.
+- Serverstart, Stopp, Neustart, Preflight, aufklappbare Containerlogs und Parkansichten.
+- Public-Freigaben fuer Serverdetails, Spieler, Parkansichten und Live-Parkdaten.
+- Gruppen- und Rechteverwaltung mit sicherem Moderatorprofil ohne `passwordless_login` und `set_player_group`.
+- Live-Parkdaten: Besucher, Bargeld, Parkwert, Firmenwert, Rating, Eintritte und Eintrittseinnahmen.
+- Live-Ankuendigungen aus OpenRCT2, etwa Ride-Breakdowns und Warnungen, ueber die Bridge verfuegbar.
+- Optionaler Public-Infobereich, konfigurierbare Footer, Serveradresse und Branding-Upload.
 - Manuelle Auswahl stabiler OpenRCT2-Container-Versionen mit Backup und Rollback.
 
-## Alpine-LXC Voraussetzungen
+## Datenschutz und Git
 
-- Alpine-LXC mit aktiviertem Docker-Nesting, mindestens 2 vCPU und 2 GB RAM.
-- Eine erreichbare Git-Repository-URL.
-- Ein sicheres Admin-Passwort.
-- HTTP-Reverse-Proxy auf `<LXC-IP>:8088` und eine direkte TCP-Weiterleitung von `11753` auf den LXC. Ein normaler HTTP-Reverse-Proxy transportiert kein OpenRCT2-Multiplayer-Protokoll.
+Dieses Repository enthaelt **keine** RCT2-Originaldaten, Saves, Autosaves, Backups, Screenshots, hochgeladenen Logos, Adminpasswoerter oder Session-Secrets. Diese Daten liegen ausschliesslich unter `data/` oder in `.env` und sind per `.gitignore` ausgeschlossen.
 
-## Neuinstallation aus Git
+Das Repository enthaelt nur das versionierte Standardlogo unter `admin/static/openrct2-server-logo.png`. Alle weiteren Logos werden im Adminbereich hochgeladen und lokal gespeichert.
 
-Als `root` im LXC ausfuehren. Die Repository-URL wird bewusst als Argument uebergeben und nicht im Projekt fest verdrahtet.
+## Voraussetzungen
+
+- Alpine-LXC mit Docker-Nesting, mindestens 2 vCPU und 2 GB RAM.
+- Git-Repository-URL und ein sicheres Adminpasswort.
+- HTTP-Reverse-Proxy auf `<LXC-IP>:8088`.
+- Direkte TCP-Weiterleitung von `11753` auf den LXC fuer OpenRCT2-Clients. Ein HTTP-Reverse-Proxy transportiert kein Multiplayer-Protokoll.
+
+## Neuinstallation im LXC
+
+Als `root` im LXC:
 
 ```sh
 apk add git
@@ -44,14 +51,14 @@ git clone <repository-url> /tmp/openrct2-admin
 ADMIN_PASSWORD='<starkes-passwort>' /tmp/openrct2-admin/deploy/install-alpine-lxc.sh /opt/openrct2-admin <repository-url>
 ```
 
-Das Skript installiert Docker und Git, klont das Repository, erzeugt eine nicht versionierte `.env`, erstellt die Laufzeitordner und startet das Webinterface. Anschliessend `/admin` im Browser oeffnen und den Erststart-Wizard durchlaufen:
+Danach `/admin` oeffnen und den Wizard abschliessen:
 
-1. Originale RCT2-Daten als ZIP hochladen.
-2. Einen `.sv6`- oder `.park`-Spielstand hochladen.
-3. Servername, Passwort und weitere Einstellungen speichern.
-4. Den Server in der Verwaltung starten.
+1. RCT2-Originaldaten als ZIP hochladen.
+2. `.sv6`- oder `.park`-Save hochladen.
+3. Website, Servername, Passwort und Public-Freigaben setzen.
+4. Gameserver starten.
 
-Die `.env` kann bei Bedarf um den externen Hostnamen ergaenzt werden:
+Die nicht versionierte `.env` kann erweitert werden:
 
 ```dotenv
 PUBLIC_HOST=openrct2.example.com
@@ -60,7 +67,7 @@ PROJECT_URL=https://github.com/bripon76/openrct2-dedicated-server
 
 ## Bestehenden LXC auf Git umstellen
 
-Wenn bereits ein manuell kopiertes Projekt unter `/opt/openrct2-admin` vorhanden ist, werden nur die versionierten Programmdateien durch Git ersetzt. Die ignorierten Laufzeitdaten unter `data/` und die `.env` bleiben dabei erhalten.
+Die folgenden Befehle ersetzen nur versionierte Programmdateien. `data/` und `.env` bleiben erhalten.
 
 ```sh
 cd /opt/openrct2-admin
@@ -71,89 +78,50 @@ git reset --hard origin/master
 ./deploy/update-alpine-lxc.sh
 ```
 
-Vor einem Update kann die konfigurierte Repository-URL kontrolliert werden:
-
-```sh
-cd /opt/openrct2-admin
-git remote get-url origin
-git log -1 --oneline
-```
-
 ## Update aus Git
 
-Nach einem Push im LXC ausfuehren:
+Nach jedem Push:
 
 ```sh
 /opt/openrct2-admin/deploy/update-alpine-lxc.sh
 ```
 
-Das Update holt `origin/master`, baut den Admincontainer neu und erstellt den Gameserver neu. Lief er vorher, wird er automatisch wieder gestartet. Nicht versionierte Laufzeitdaten unter `data/` und die `.env` bleiben erhalten.
+Das Skript ruft `origin/master` ab, baut den Admincontainer neu und erstellt den Gameserver mit der gewaehlten OpenRCT2-Version neu. Lief der Server vorher, startet er anschliessend wieder. Ein separates `git pull` ist nicht erforderlich.
 
-`update-alpine-lxc.sh` fuehrt bereits `git fetch` und den Checkout von `origin/master` aus. Ein zusaetzliches `git pull` ist nicht erforderlich.
-
-Fuer einen anderen Branch den Branch explizit setzen:
-
-```sh
-BRANCH=main /opt/openrct2-admin/deploy/update-alpine-lxc.sh
-```
-
-## Git-Info
-
-Der laufende Versionsstand und das konfigurierte Remote-Repository lassen sich jederzeit im LXC anzeigen:
+Status und Remote pruefen:
 
 ```sh
 cd /opt/openrct2-admin
 git log -1 --oneline
 git status --short
 git remote -v
+docker compose ps
 ```
 
-Vor jedem Release werden die Git-Informationen in dieser Anleitung und die Update-Schritte mitgepflegt.
-
-## Lokale Entwicklung
+## Lokale Mac-Entwicklung
 
 ```sh
 cp .env.example .env
 # ADMIN_PASSWORD und SESSION_SECRET in .env setzen
+docker compose -f docker-compose.live-mac.yml --profile game down --remove-orphans
 docker compose -f docker-compose.live-mac.yml up -d --build admin
 docker compose -f docker-compose.live-mac.yml --profile game create openrct2
 ```
 
-Das Interface ist unter `http://localhost:8088/admin` erreichbar.
+- Admin: `http://localhost:8088/admin`
+- Public: `http://localhost:8088/public`
+- OpenRCT2-Client: `localhost:11753`
 
-Zum lokalen Testen des laufenden Gameservers:
-
-```text
-OpenRCT2-Client: localhost:11753
-```
-
-Aktuelle Containerlogs:
+Logs:
 
 ```sh
 docker compose -f docker-compose.live-mac.yml logs -f admin
 docker compose -f docker-compose.live-mac.yml logs -f openrct2
 ```
 
-## Multiplayer und mehrere Parks
+## Mehrere Parks
 
-Ein OpenRCT2-Gameserver hostet genau einen geladenen Park, kann aber mehrere Spieler gleichzeitig in diesem Park aufnehmen. Der aktuelle Admin verwaltet deshalb eine Gameserver-Instanz und einen aktiven Spielstand.
-
-Mehrere Parks gleichzeitig sind moeglich, erfordern aber mehrere Gameserver-Instanzen. Die derzeitige Oberflaeche ist noch kein Mehrserver-Manager.
-
-Die empfohlene Betriebsform ist ein LXC pro Park:
-
-- Jeder LXC hat eine eigene Git-Installation, eigene `data/`-Laufzeitdaten und einen eigenen Adminzugang.
-- Jeder Gameserver lauscht intern auf `11753/tcp`.
-- Nach aussen braucht jeder Park einen eigenen TCP-Port, zum Beispiel `11753` und `11754`, die jeweils an `11753` des passenden LXC weitergeleitet werden.
-- Ein HTTP-Reverse-Proxy kann pro Park eine eigene Webadresse auf den jeweiligen Adminport `8088` leiten, transportiert aber nicht das OpenRCT2-Multiplayer-Protokoll.
-
-Alternativ koennen mehrere Compose-Projekte in einem LXC betrieben werden. Dafuer muessen pro Park eindeutige Container-Namen, Datenverzeichnisse, Adminports und Gameserverports konfiguriert werden. Eine zentrale Webverwaltung aller Instanzen ist dafuer als eigener Ausbau noetig.
-
-## Laufzeitdaten
-
-`data/` und `.env` sind absichtlich von Git ausgeschlossen. Sie enthalten urheberrechtlich geschuetzte RCT2-Dateien, Spielstaende, Backups, Screenshots sowie Secrets und duerfen nicht committed werden.
-
-Auch hochgeladene Logos und Webeinstellungen liegen ausschliesslich unter `data/config/` und werden nicht versioniert.
+Ein Gameserver hostet genau einen Park, kann aber mehrere Spieler bedienen. Fuer mehrere parallele Parks wird ein LXC pro Park empfohlen: getrennte Laufzeitdaten, eigener Adminzugang und eigener externer TCP-Port.
 
 ## Pruefungen
 
