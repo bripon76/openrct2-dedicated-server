@@ -98,27 +98,6 @@ git remote -v
 docker compose ps
 ```
 
-## Lokale Mac-Entwicklung
-
-```sh
-cp .env.example .env
-# ADMIN_PASSWORD und SESSION_SECRET in .env setzen
-docker compose -f docker-compose.live-mac.yml --profile game down --remove-orphans
-docker compose -f docker-compose.live-mac.yml up -d --build admin
-docker compose -f docker-compose.live-mac.yml --profile game create openrct2
-```
-
-- Admin: `http://localhost:8088/admin`
-- Public: `http://localhost:8088/public`
-- OpenRCT2-Client: `localhost:11753`
-
-Logs:
-
-```sh
-docker compose -f docker-compose.live-mac.yml logs -f admin
-docker compose -f docker-compose.live-mac.yml logs -f openrct2
-```
-
 ## Mehrere Parks
 
 Ein Gameserver hostet genau einen Park, kann aber mehrere Spieler bedienen. Fuer mehrere parallele Parks wird ein LXC pro Park empfohlen: getrennte Laufzeitdaten, eigener Adminzugang und eigener externer TCP-Port.
