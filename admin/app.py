@@ -222,7 +222,7 @@ def read_web_settings():
         raw = json.loads(pathlib.Path(WEB_SETTINGS_FILE).read_text(encoding='utf-8'))
         if not isinstance(raw, dict):
             return {}
-        keys = ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements')
+        keys = ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements', 'ui_language')
         return {key: str(raw[key]).replace('\r', '')[:1000] for key in keys if key in raw}
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
@@ -238,7 +238,7 @@ def write_web_settings(values):
     os.replace(temporary, path)
 
 def read_network_settings():
-    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':'', 'server_address':'', 'public_info_title':'', 'public_info_text':'', 'public_show_server_details':'true', 'public_show_park_views':'true', 'public_show_players':'true', 'public_show_park_stats':'true', 'public_show_announcements':'false'}
+    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':'', 'server_address':'', 'public_info_title':'', 'public_info_text':'', 'public_show_server_details':'true', 'public_show_park_views':'true', 'public_show_players':'true', 'public_show_park_stats':'true', 'public_show_announcements':'false', 'ui_language':'de'}
     if MOCK:
         values.update({'server_name': MOCK_STATE['server']['name'], 'server_description': MOCK_STATE['server']['description'], 'server_greeting':'Willkommen!', 'maxplayers': str(MOCK_STATE['server']['maxPlayers']), 'advertise':'false'})
         values.update(read_web_settings())
@@ -250,19 +250,19 @@ def read_network_settings():
     cfg.read(CONFIG_FILE)
     if cfg.has_section('network'):
         for k in values:
-            if k in ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements'): continue
+            if k in ('site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements', 'ui_language'): continue
             if cfg.has_option('network', k): values[k] = cfg.get('network', k).strip('"')
     if cfg.has_option('openrct2_admin', 'site_title'):
         values['site_title'] = cfg.get('openrct2_admin', 'site_title').strip('"')
-    for key in ('admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements'):
+    for key in ('admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements', 'ui_language'):
         if cfg.has_option('openrct2_admin', key):
             values[key] = cfg.get('openrct2_admin', key).strip('"')
     values.update(read_web_settings())
     return values
 
 def write_network_settings(payload):
-    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text','server_address','public_info_title','public_info_text','public_show_server_details','public_show_park_views','public_show_players','public_show_park_stats','public_show_announcements'}
-    web_keys = {'site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements'}
+    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text','server_address','public_info_title','public_info_text','public_show_server_details','public_show_park_views','public_show_players','public_show_park_stats','public_show_announcements','ui_language'}
+    web_keys = {'site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements', 'ui_language'}
     if MOCK:
         if 'server_name' in payload: MOCK_STATE['server']['name'] = str(payload['server_name'])[:64]
         if 'server_description' in payload: MOCK_STATE['server']['description'] = str(payload['server_description'])[:256]
@@ -276,6 +276,10 @@ def write_network_settings(payload):
     if not cfg.has_section('network'): cfg.add_section('network')
     for k,v in payload.items():
         if k not in allowed: continue
+        if k == 'ui_language':
+            if not cfg.has_section('general'): cfg.add_section('general')
+            cfg.set('general', 'language', 'en-GB' if str(v) == 'en' else 'de-DE')
+            continue
         if k in ('site_title', 'admin_footer_text', 'public_footer_text'):
             if not cfg.has_section('openrct2_admin'): cfg.add_section('openrct2_admin')
             cfg.set('openrct2_admin', k, str(v).replace('\n',' ')[:256])
@@ -468,6 +472,7 @@ def state():
         'publicShowPlayers': str(settings.get('public_show_players', 'true')).lower() == 'true',
         'publicShowParkStats': str(settings.get('public_show_park_stats', 'true')).lower() == 'true',
         'publicShowAnnouncements': str(settings.get('public_show_announcements', 'false')).lower() == 'true',
+        'uiLanguage': settings.get('ui_language', 'de'),
     }
     try:
         bridge_status = bridge_call({'cmd':'status'})
@@ -1103,7 +1108,7 @@ def get_settings(): return jsonify(read_network_settings())
 @require_admin
 def set_settings():
     payload = request.get_json(force=True) or {}
-    game_settings = {'server_name', 'server_description', 'server_greeting', 'maxplayers', 'advertise', 'default_password'}
+    game_settings = {'server_name', 'server_description', 'server_greeting', 'maxplayers', 'advertise', 'default_password', 'ui_language'}
     was_running = False
     try:
         was_running = bool(set(payload) & game_settings) and not MOCK and CONTROL_MODE == 'docker' and runtime_state() == 'running'

@@ -33,7 +33,7 @@ Die lokale Admin-Bridge verwendet `127.0.0.1:11754` innerhalb des Gameserver-Con
 
 OpenRCT2 `0.5.5` erlaubt Remote-Plugins das Lesen der genannten Parkdaten und das Senden einer Servernachricht. Direkte Aenderungen von Parkeigenschaften, Besuchergenerierung, Parkflags, Auszeichnungen und Parknachrichten werden von dieser Version mit `Game state is not mutable in this context` abgewiesen und werden daher nicht angeboten.
 
-Die Sprachwahl der Admin- und Public-Seite ist pro Browser gespeichert und betrifft nur die Weboberflaeche. Spielankuendigungen stammen bereits gerendert aus OpenRCT2 und folgen deshalb ausschliesslich der zur Laufzeit in OpenRCT2 eingestellten Sprache. Die Runtime-Sprache wird nicht durch diese Verwaltung veraendert.
+Die Sprachwahl wird global im Adminbereich gesetzt und gilt anschliessend fuer Admin und Public. Sie schreibt `de-DE` oder `en-GB` in `[general] language` der OpenRCT2-Konfiguration und startet einen laufenden Gameserver kontrolliert neu. Spielankuendigungen stammen bereits gerendert aus OpenRCT2 und folgen dadurch derselben Runtime-Sprache.
 
 ## Datenschutz und Git
 
