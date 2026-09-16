@@ -19,19 +19,21 @@ Die lokale Admin-Bridge verwendet `127.0.0.1:11754` innerhalb des Gameserver-Con
 
 - Responsive Admin- und Public-Oberflaeche im OpenRCT2-Parkdesign.
 - Ersteinrichtung fuer RCT2-Originaldaten, Savegame und Servereinstellungen.
-- Save-Upload, Aktivierung, sicherer Loeschschutz des aktiven Saves und Tagesbackups.
+- Save-Upload, Aktivierung, sicherer Loeschschutz des aktiven Saves, Tagesbackups und authentifizierter Backup-Download.
 - Serverstart, Stopp, Neustart, Preflight, aufklappbare Containerlogs und Parkansichten.
 - Separate Public-Freigaben fuer Serverdetails, Spieler, Parkansichten, Live-Parkdaten und Live-Ankuendigungen.
 - Gruppen- und Rechteverwaltung mit sicherem Moderatorprofil ohne `passwordless_login` und `set_player_group`.
 - Live-Parkdaten: Besucher, Finanzen, Kredit, Eintritt und Preise, Park- und Firmenwert, Rating, Eintritte, Besuchergenerierung, Parkgroesse, Forschung, Auszeichnungen und Parkflags.
 - Live-Ankuendigungen aus OpenRCT2, etwa Ride-Breakdowns und Warnungen, sind im Admin sichtbar und bei aktivierter Freigabe auch auf der Public-Seite.
-- Admin-Aktionen mit expliziter Bestaetigung: Nachricht an alle verbundenen Spieler; weitere Parksteuerungen werden nur aktiviert, wenn die verwendete OpenRCT2-Version sie fuer Remote-Plugins freigibt.
+- Admin-Aktion mit expliziter Bestaetigung: Nachricht an alle verbundenen Spieler.
 - Optionaler Public-Infobereich, konfigurierbare Footer, Serveradresse und Branding-Upload.
 - Manuelle Auswahl stabiler OpenRCT2-Container-Versionen mit Backup und Rollback.
 
 ### OpenRCT2-Grenzen
 
-OpenRCT2 `0.5.5` erlaubt Remote-Plugins das Lesen der genannten Parkdaten und das Senden einer Servernachricht. Direkte Aenderungen von Parkeigenschaften, Besuchergenerierung, Parkflags, Auszeichnungen und Parknachrichten werden von dieser Version mit `Game state is not mutable in this context` abgewiesen. Die Verwaltung zeigt diese Funktionen deshalb deaktiviert an, statt nicht wirksame Aenderungen vorzuspiegeln.
+OpenRCT2 `0.5.5` erlaubt Remote-Plugins das Lesen der genannten Parkdaten und das Senden einer Servernachricht. Direkte Aenderungen von Parkeigenschaften, Besuchergenerierung, Parkflags, Auszeichnungen und Parknachrichten werden von dieser Version mit `Game state is not mutable in this context` abgewiesen und werden daher nicht angeboten.
+
+Die Sprachwahl der Admin- und Public-Seite ist pro Browser gespeichert und betrifft nur die Weboberflaeche. Spielankuendigungen stammen bereits gerendert aus OpenRCT2 und folgen deshalb ausschliesslich der zur Laufzeit in OpenRCT2 eingestellten Sprache. Die Runtime-Sprache wird nicht durch diese Verwaltung veraendert.
 
 ## Datenschutz und Git
 
@@ -67,8 +69,12 @@ Die nicht versionierte `.env` kann erweitert werden:
 
 ```dotenv
 PUBLIC_HOST=openrct2.example.com
+PUBLIC_ADDRESS_URL=https://api.ipify.org
+PUBLIC_ADDRESS_REFRESH_SECONDS=300
 PROJECT_URL=https://github.com/bripon76/openrct2-dedicated-server
 ```
+
+Wenn die manuelle Serveradresse im Adminbereich leer ist, fragt die Verwaltung `PUBLIC_ADDRESS_URL` mit kurzem Timeout ab, akzeptiert ausschliesslich IPv4 und cached das Ergebnis fuer `PUBLIC_ADDRESS_REFRESH_SECONDS`. Bei Fehlern wird `PUBLIC_HOST` verwendet. Die angezeigte Multiplayer-Adresse erhaelt immer Port `11753`.
 
 ## Bestehenden LXC auf Git umstellen
 

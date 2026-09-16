@@ -19,6 +19,8 @@ services:
       OPENRCT2_IMAGE: "${OPENRCT2_IMAGE:-openrct2/openrct2-cli:0.5.5}"
       MAP_REFRESH_SECONDS: "300"
       PUBLIC_HOST: "${PUBLIC_HOST:-openrct2.example.com}"
+      PUBLIC_ADDRESS_URL: "${PUBLIC_ADDRESS_URL:-https://api.ipify.org}"
+      PUBLIC_ADDRESS_REFRESH_SECONDS: "${PUBLIC_ADDRESS_REFRESH_SECONDS:-300}"
     volumes:
       - ./data/config:/data/config
       - ./data/rct2:/data/rct2

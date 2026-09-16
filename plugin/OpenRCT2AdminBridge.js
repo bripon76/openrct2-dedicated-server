@@ -7,17 +7,8 @@ const PERMISSIONS = [
   'set_player_group','cheat','toggle_scenery_cluster','passwordless_login','modify_tile','edit_scenario_options'
 ];
 const MODERATOR_PERMISSIONS = PERMISSIONS.filter(permission => !['passwordless_login', 'set_player_group'].includes(permission));
-const PARK_PROPERTIES = [
-  'cash', 'bankLoan', 'maxBankLoan', 'entranceFee', 'suggestedGuestMaximum',
-  'guestGenerationProbability', 'guestInitialCash', 'guestInitialHappiness',
-  'guestInitialHunger', 'guestInitialThirst', 'landPrice', 'constructionRightsPrice'
-];
-const PARK_FLAGS = ['open', 'samePriceInPark', 'freeEntry', 'difficultGuestGeneration', 'difficultParkRating'];
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 function result(ok, extra) { return Object.assign({ ok: ok }, extra || {}); }
-function supportedProperty(name) {
-  return PARK_PROPERTIES.includes(name) && typeof park[name] === 'number';
-}
 function captureMap() {
   return result(false, { error:'Headless captureImage is unavailable; use the CLI capture service.' });
 }
@@ -36,15 +27,12 @@ function status() {
       totalIncomeFromAdmissions: park.totalIncomeFromAdmissions, landPrice: park.landPrice,
       constructionRightsPrice: park.constructionRightsPrice, parkSize: park.parkSize,
       research: park.research, casualtyPenalty: park.casualtyPenalty,
-      awards: park.awards || [], monthlyExpenditureAvailable: typeof park.getMonthlyExpenditure === 'function',
-      flags: PARK_FLAGS.reduce((flags, flag) => { try { flags[flag] = park.getFlag(flag); } catch (_) {} return flags; }, {})
+      awards: park.awards || [], monthlyExpenditureAvailable: typeof park.getMonthlyExpenditure === 'function'
     },
     announcements: (park.messages || []).slice(-10).map(message => ({ type: message.type, text: message.text, subject: message.subject })),
     defaultGroup: network.defaultGroup,
     groups: network.groups.map(g => ({ id: g.id, name: g.name, permissions: g.permissions.slice() })),
     players: network.players.filter(p => !localPlayer || p.id !== localPlayer.id).map(p => ({ id:p.id, name:p.name, group:p.group, ping:p.ping, commandsRan:p.commandsRan, moneySpent:p.moneySpent })),
-    // OpenRCT2 0.5.5 remote plugins expose these values but reject direct game-state writes.
-    parkControls: { readableProperties: PARK_PROPERTIES.filter(supportedProperty), propertyWrites:false, guestGeneration:false, flags:false, awards:false, parkMessages:false, propertyWriteReason:'OpenRCT2 0.5.5 erlaubt Remote-Plugins nur das Lesen von Parkdaten. Servernachrichten funktionieren; Parkwerte, Flags, Auszeichnungen und Parknachrichten sind technisch gesperrt.' }
   };
 }
 function exec(action, args) { return new Promise(resolve => context.executeAction(action, args, r => resolve(r))); }
@@ -68,24 +56,6 @@ async function command(q) {
     case 'kick_player': network.kickPlayer(Number(q.playerId)); return result(true);
     case 'set_player_group': { const r=await exec('playersetgroup',{playerId:Number(q.playerId),groupId:Number(q.groupId)}); return result(!r.error,{actionResult:r}); }
     case 'send_message': network.sendMessage(String(q.message || '').slice(0,240)); return result(true);
-    case 'post_park_message': {
-      return result(false, { error:'OpenRCT2 remote plugins do not allow park messages' });
-    }
-    case 'set_park_property': {
-      return result(false, { error:'OpenRCT2 remote plugins do not allow direct park-property writes' });
-    }
-    case 'set_guest_generation': {
-      return result(false, { error:'OpenRCT2 remote plugins do not allow guest-generation writes' });
-    }
-    case 'set_park_flag': {
-      return result(false, { error:'OpenRCT2 remote plugins do not allow park-flag writes' });
-    }
-    case 'clear_awards': {
-      return result(false, { error:'OpenRCT2 remote plugins do not allow award changes' });
-    }
-    case 'grant_award': {
-      return result(false, { error:'OpenRCT2 remote plugins do not allow award changes' });
-    }
     case 'add_group': {
       const before=network.groups.map(g=>g.id); network.addGroup(); const g=network.groups.find(x=>!before.includes(x.id));
       if(g&&q.name) g.name=String(q.name).slice(0,64); return result(true,{group:g?{id:g.id,name:g.name}:null});

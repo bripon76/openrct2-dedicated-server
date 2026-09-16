@@ -1,5 +1,5 @@
 from flask import Flask, Response, jsonify, request, send_from_directory, session, redirect, stream_with_context
-import configparser, json, os, socket, time, secrets, pathlib, zipfile, shutil, tempfile, shlex, threading, random, tarfile, io, re, urllib.request
+import configparser, ipaddress, json, os, socket, time, secrets, pathlib, zipfile, shutil, tempfile, shlex, threading, random, tarfile, io, re, urllib.request
 
 try:
     import docker
@@ -120,6 +120,10 @@ MANIFEST_FILE = os.getenv('RCT2_MANIFEST_FILE', os.path.join(os.path.dirname(__f
 SCREENSHOT_DIR = os.getenv('SCREENSHOT_DIR', '/data/config/screenshot')
 OPENRCT2_VERSION = os.getenv('OPENRCT2_VERSION', '0.5.5')
 PUBLIC_HOST = os.getenv('PUBLIC_HOST', 'openrct2.example.com')
+PUBLIC_ADDRESS_URL = os.getenv('PUBLIC_ADDRESS_URL', 'https://api.ipify.org')
+PUBLIC_ADDRESS_REFRESH_SECONDS = max(1, int(os.getenv('PUBLIC_ADDRESS_REFRESH_SECONDS', '300')))
+PUBLIC_ADDRESS_TIMEOUT = max(1, int(os.getenv('PUBLIC_ADDRESS_TIMEOUT_SECONDS', '3')))
+PUBLIC_ADDRESS_CACHE = {'address': '', 'expires': 0.0}
 PROJECT_URL = os.getenv('PROJECT_URL', 'https://github.com/bripon76/openrct2-dedicated-server')
 MAP_VIEW_COUNT = 4
 MAP_HISTORY_LIMIT = 20
@@ -237,6 +241,7 @@ def read_network_settings():
     values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':'', 'server_address':'', 'public_info_title':'', 'public_info_text':'', 'public_show_server_details':'true', 'public_show_park_views':'true', 'public_show_players':'true', 'public_show_park_stats':'true', 'public_show_announcements':'false'}
     if MOCK:
         values.update({'server_name': MOCK_STATE['server']['name'], 'server_description': MOCK_STATE['server']['description'], 'server_greeting':'Willkommen!', 'maxplayers': str(MOCK_STATE['server']['maxPlayers']), 'advertise':'false'})
+        values.update(read_web_settings())
         return values
     if not os.path.exists(CONFIG_FILE):
         values.update(read_web_settings())
@@ -291,6 +296,37 @@ def branding_logo_url():
         if path.is_file():
             return f'/branding/logo?updated={int(path.stat().st_mtime)}'
     return '/static/openrct2-server-logo.png'
+
+def _address_with_port(host):
+    host = str(host or '').strip()
+    if not host:
+        return ''
+    try:
+        address = ipaddress.ip_address(host.strip('[]'))
+        return f'[{address}]:11753' if address.version == 6 else f'{address}:11753'
+    except ValueError:
+        pass
+    # Keep an explicitly configured hostname:port unchanged.
+    if re.fullmatch(r'(?:[^:\[\]]+|\[[^\]]+\]):\d{1,5}', host):
+        return host
+    return f'{host}:11753'
+
+def public_server_address(override):
+    if str(override or '').strip():
+        return _address_with_port(override)
+    now = time.monotonic()
+    if now >= PUBLIC_ADDRESS_CACHE['expires']:
+        try:
+            request_object = urllib.request.Request(PUBLIC_ADDRESS_URL, headers={'User-Agent': 'openrct2-admin'})
+            with urllib.request.urlopen(request_object, timeout=PUBLIC_ADDRESS_TIMEOUT) as response:
+                candidate = response.read(64).decode('ascii', errors='ignore').strip()
+            if ipaddress.ip_address(candidate).version != 4:
+                raise ValueError('public address service did not return IPv4')
+            PUBLIC_ADDRESS_CACHE['address'] = candidate
+        except Exception as error:
+            app.logger.warning('Public IPv4 discovery failed: %s', error)
+        PUBLIC_ADDRESS_CACHE['expires'] = now + PUBLIC_ADDRESS_REFRESH_SECONDS
+    return _address_with_port(PUBLIC_ADDRESS_CACHE['address'] or PUBLIC_HOST)
 
 def setup_status():
     data = rct2_data_status()
@@ -399,7 +435,10 @@ threading.Thread(target=_periodic_map_refresh, name='park-snapshot-refresh', dae
 
 def state():
     if MOCK:
-        out = json.loads(json.dumps(MOCK_STATE)); out['mock'] = True; return out
+        out = json.loads(json.dumps(MOCK_STATE))
+        out['server']['address'] = public_server_address(read_network_settings().get('server_address'))
+        out['mock'] = True
+        return out
 
     settings = read_network_settings()
     runtime = runtime_state()
@@ -414,7 +453,7 @@ def state():
             'description': settings.get('server_description', ''),
             'maxPlayers': int(settings.get('maxplayers') or 10),
             'port': 11753,
-            'address': settings.get('server_address') or f"{PUBLIC_HOST}:11753",
+            'address': public_server_address(settings.get('server_address')),
         },
         'players': [],
         'siteTitle': settings.get('site_title') or 'OpenRCT2 Server',
@@ -444,7 +483,7 @@ def state():
         'description': settings.get('server_description', ''),
         'maxPlayers': int(settings.get('maxplayers') or 10),
         'port': 11753,
-        'address': settings.get('server_address') or f"{PUBLIC_HOST}:11753",
+        'address': public_server_address(settings.get('server_address')),
         'version': f'OpenRCT2 {selected_game_version()}',
     })
     shot = os.path.join(SCREENSHOT_DIR, 'server-map.png')
@@ -648,6 +687,13 @@ def create_backup():
         (backup_dir / backup['name']).unlink()
     return list_backups()
 
+def backup_file(name):
+    basename = pathlib.Path(name).name
+    if basename != name or not re.fullmatch(r'backup-[^/]+\.tar\.gz', basename):
+        return None
+    path = pathlib.Path(BACKUP_DIR) / basename
+    return path if path.is_file() else None
+
 def selected_game_image():
     try:
         image = pathlib.Path(IMAGE_SELECTION_FILE).read_text(encoding='utf-8').strip()
@@ -745,9 +791,8 @@ def update_game_image(version):
         raise RuntimeError(f'Update fehlgeschlagen; vorheriger Container wurde wiederhergestellt: {error}')
 
 def restore_backup(name):
-    name = pathlib.Path(name).name
-    backup_path = pathlib.Path(BACKUP_DIR) / name
-    if not backup_path.is_file() or not name.startswith('backup-') or not name.endswith('.tar.gz'):
+    backup_path = backup_file(name)
+    if backup_path is None:
         raise ValueError('Backup nicht gefunden')
     with tempfile.TemporaryDirectory(prefix='restore-') as temporary:
         root = pathlib.Path(temporary)
@@ -970,6 +1015,14 @@ def api_preflight(): return jsonify(server_preflight())
 def api_backups():
     return jsonify({'ok': True, 'backups': list_backups()})
 
+@app.get('/api/backups/<path:name>/download')
+@require_admin
+def api_backup_download(name):
+    backup_path = backup_file(name)
+    if backup_path is None:
+        return jsonify({'ok': False, 'error': 'Backup nicht gefunden'}), 404
+    return send_from_directory(BACKUP_DIR, backup_path.name, as_attachment=True)
+
 @app.post('/api/backups/<path:name>/restore')
 @require_admin
 def api_backup_restore(name):
@@ -1147,21 +1200,10 @@ def server_logs():
 @require_admin
 def api_action():
     payload = request.get_json(force=True) or {}; cmd = payload.get('cmd')
-    park_properties = {'cash', 'bankLoan', 'maxBankLoan', 'entranceFee', 'suggestedGuestMaximum', 'guestGenerationProbability', 'guestInitialCash', 'guestInitialHappiness', 'guestInitialHunger', 'guestInitialThirst', 'landPrice', 'constructionRightsPrice'}
-    park_flags = {'open', 'samePriceInPark', 'freeEntry', 'difficultGuestGeneration', 'difficultParkRating'}
-    confirmed = {'send_message', 'post_park_message', 'set_park_property', 'set_guest_generation', 'set_park_flag', 'clear_awards', 'grant_award'}
-    if cmd in confirmed and payload.get('confirm') is not True:
+    if cmd == 'send_message' and payload.get('confirm') is not True:
         return jsonify({'ok': False, 'error': 'Aktion muss bestätigt werden'}), 400
-    if cmd in ('send_message', 'post_park_message') and (not isinstance(payload.get('message'), str) or not payload['message'].strip() or len(payload['message']) > 240):
+    if cmd == 'send_message' and (not isinstance(payload.get('message'), str) or not payload['message'].strip() or len(payload['message']) > 240):
         return jsonify({'ok': False, 'error': 'Nachricht muss 1 bis 240 Zeichen enthalten'}), 400
-    if cmd == 'set_park_property' and (payload.get('property') not in park_properties or type(payload.get('value')) is not int or not -1000000000 <= payload['value'] <= 1000000000):
-        return jsonify({'ok': False, 'error': 'Ungültige Parkeigenschaft'}), 400
-    if cmd == 'set_guest_generation' and (type(payload.get('probability')) is not int or not 0 <= payload['probability'] <= 1000 or type(payload.get('suggestedMaximum')) is not int or not 0 <= payload['suggestedMaximum'] <= 100000):
-        return jsonify({'ok': False, 'error': 'Ungültige Besuchergenerierung'}), 400
-    if cmd == 'set_park_flag' and (payload.get('flag') not in park_flags or type(payload.get('value')) is not bool):
-        return jsonify({'ok': False, 'error': 'Ungültige Parkflagge'}), 400
-    if cmd == 'grant_award' and (type(payload.get('awardType')) is not int or not 0 <= payload['awardType'] <= 255):
-        return jsonify({'ok': False, 'error': 'Ungültige Auszeichnung'}), 400
     if MOCK:
         if cmd == 'set_player_group':
             p = next((x for x in MOCK_STATE['players'] if x['id'] == int(payload['playerId'])), None)
