@@ -238,7 +238,7 @@ def write_web_settings(values):
     os.replace(temporary, path)
 
 def read_network_settings():
-    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':'', 'server_address':'', 'public_info_title':'', 'public_info_text':'', 'public_show_server_details':'true', 'public_show_park_views':'true', 'public_show_players':'true', 'public_show_park_stats':'true', 'public_show_announcements':'false', 'ui_language':'de'}
+    values = {'server_name':'', 'server_description':'', 'server_greeting':'', 'maxplayers':'10', 'advertise':'false', 'advertise_address':'', 'default_password':'', 'site_title':'OpenRCT2 Server', 'admin_footer_text':'', 'public_footer_text':'', 'server_address':'', 'public_info_title':'', 'public_info_text':'', 'public_show_server_details':'true', 'public_show_park_views':'true', 'public_show_players':'true', 'public_show_park_stats':'true', 'public_show_announcements':'false', 'ui_language':'de'}
     if MOCK:
         values.update({'server_name': MOCK_STATE['server']['name'], 'server_description': MOCK_STATE['server']['description'], 'server_greeting':'Willkommen!', 'maxplayers': str(MOCK_STATE['server']['maxPlayers']), 'advertise':'false'})
         values.update(read_web_settings())
@@ -261,7 +261,7 @@ def read_network_settings():
     return values
 
 def write_network_settings(payload):
-    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','default_password','site_title','admin_footer_text','public_footer_text','server_address','public_info_title','public_info_text','public_show_server_details','public_show_park_views','public_show_players','public_show_park_stats','public_show_announcements','ui_language'}
+    allowed = {'server_name','server_description','server_greeting','maxplayers','advertise','advertise_address','default_password','site_title','admin_footer_text','public_footer_text','server_address','public_info_title','public_info_text','public_show_server_details','public_show_park_views','public_show_players','public_show_park_stats','public_show_announcements','ui_language'}
     web_keys = {'site_title', 'admin_footer_text', 'public_footer_text', 'server_address', 'public_info_title', 'public_info_text', 'public_show_server_details', 'public_show_park_views', 'public_show_players', 'public_show_park_stats', 'public_show_announcements', 'ui_language'}
     if MOCK:
         if 'server_name' in payload: MOCK_STATE['server']['name'] = str(payload['server_name'])[:64]
@@ -284,7 +284,8 @@ def write_network_settings(payload):
             if not cfg.has_section('openrct2_admin'): cfg.add_section('openrct2_admin')
             cfg.set('openrct2_admin', k, str(v).replace('\n',' ')[:256])
             continue
-        if k == 'maxplayers': v = str(max(1, min(255, int(v))))
+        if k == 'advertise_address': v = validate_advertise_address(v)
+        elif k == 'maxplayers': v = str(max(1, min(255, int(v))))
         elif k == 'advertise': v = 'true' if str(v).lower() in ('1','true','yes','on') else 'false'
         else: v = str(v).replace('\n',' ')[:256]
         cfg.set('network', k, v)
@@ -315,7 +316,51 @@ def _address_with_port(host):
         return host
     return f'{host}:11753'
 
-def public_server_address(override):
+def validate_advertise_address(value):
+    value = str(value or '')
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError('Ungültige DDNS-/OpenRCT2-Werbeadresse')
+    value = value.strip()
+    if not value:
+        return ''
+    if len(value) > 253:
+        raise ValueError('Ungültige DDNS-/OpenRCT2-Werbeadresse')
+
+    host, port = value, None
+    if value.startswith('['):
+        match = re.fullmatch(r'\[([^\]]+)\](?::(\d{1,5}))?', value)
+        if not match:
+            raise ValueError('Ungültige DDNS-/OpenRCT2-Werbeadresse')
+        try:
+            if ipaddress.ip_address(match.group(1)).version != 6:
+                raise ValueError
+        except ValueError:
+            raise ValueError('Ungültige DDNS-/OpenRCT2-Werbeadresse') from None
+        host, port = f'[{match.group(1)}]', match.group(2)
+    else:
+        match = re.fullmatch(r'([^:]+?)(?::(\d{1,5}))?', value)
+        if not match:
+            raise ValueError('Ungültige DDNS-/OpenRCT2-Werbeadresse')
+        host, port = match.group(1), match.group(2)
+        try:
+            address = ipaddress.ip_address(host)
+            if address.version != 4:
+                raise ValueError
+            host = str(address)
+        except ValueError:
+            if re.fullmatch(r'[0-9.]+', host) or not re.fullmatch(r'(?=.{1,253}\.?$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.?', host):
+                raise ValueError('Ungültige DDNS-/OpenRCT2-Werbeadresse') from None
+    if port and not 1 <= int(port) <= 65535:
+        raise ValueError('Ungültige DDNS-/OpenRCT2-Werbeadresse')
+    return f'{host}:{port}' if port else host
+
+def public_server_address(advertise_address='', override=''):
+    try:
+        configured_address = validate_advertise_address(advertise_address)
+    except ValueError:
+        configured_address = ''
+    if configured_address:
+        return _address_with_port(configured_address)
     if str(override or '').strip():
         return _address_with_port(override)
     now = time.monotonic()
@@ -440,7 +485,8 @@ threading.Thread(target=_periodic_map_refresh, name='park-snapshot-refresh', dae
 def state():
     if MOCK:
         out = json.loads(json.dumps(MOCK_STATE))
-        out['server']['address'] = public_server_address(read_network_settings().get('server_address'))
+        settings = read_network_settings()
+        out['server']['address'] = public_server_address(settings.get('advertise_address'), settings.get('server_address'))
         out['mock'] = True
         return out
 
@@ -457,7 +503,7 @@ def state():
             'description': settings.get('server_description', ''),
             'maxPlayers': int(settings.get('maxplayers') or 10),
             'port': 11753,
-            'address': public_server_address(settings.get('server_address')),
+            'address': public_server_address(settings.get('advertise_address'), settings.get('server_address')),
         },
         'players': [],
         'siteTitle': settings.get('site_title') or 'OpenRCT2 Server',
@@ -488,7 +534,7 @@ def state():
         'description': settings.get('server_description', ''),
         'maxPlayers': int(settings.get('maxplayers') or 10),
         'port': 11753,
-        'address': public_server_address(settings.get('server_address')),
+        'address': public_server_address(settings.get('advertise_address'), settings.get('server_address')),
         'version': f'OpenRCT2 {selected_game_version()}',
     })
     shot = os.path.join(SCREENSHOT_DIR, 'server-map.png')
@@ -1108,7 +1154,7 @@ def get_settings(): return jsonify(read_network_settings())
 @require_admin
 def set_settings():
     payload = request.get_json(force=True) or {}
-    game_settings = {'server_name', 'server_description', 'server_greeting', 'maxplayers', 'advertise', 'default_password', 'ui_language'}
+    game_settings = {'server_name', 'server_description', 'server_greeting', 'maxplayers', 'advertise', 'advertise_address', 'default_password', 'ui_language'}
     was_running = False
     try:
         was_running = bool(set(payload) & game_settings) and not MOCK and CONTROL_MODE == 'docker' and runtime_state() == 'running'

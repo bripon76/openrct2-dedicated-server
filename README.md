@@ -27,6 +27,7 @@ Die lokale Admin-Bridge verwendet `127.0.0.1:11754` innerhalb des Gameserver-Con
 - Live-Ankuendigungen aus OpenRCT2, etwa Ride-Breakdowns und Warnungen, sind im Admin sichtbar und bei aktivierter Freigabe auch auf der Public-Seite.
 - Admin-Aktion mit expliziter Bestaetigung: Nachricht an alle verbundenen Spieler.
 - Optionaler Public-Infobereich, konfigurierbare Footer, Serveradresse und Branding-Upload.
+- DDNS-/OpenRCT2-Werbeadresse in `[network] advertise_address` mit sicherer Host-, IPv4- oder geklammerter-IPv6-Pruefung.
 - Manuelle Auswahl stabiler OpenRCT2-Container-Versionen mit Backup und Rollback.
 
 ### OpenRCT2-Grenzen
@@ -74,7 +75,11 @@ PUBLIC_ADDRESS_REFRESH_SECONDS=300
 PROJECT_URL=https://github.com/bripon76/openrct2-dedicated-server
 ```
 
-Wenn die manuelle Serveradresse im Adminbereich leer ist, fragt die Verwaltung `PUBLIC_ADDRESS_URL` mit kurzem Timeout ab, akzeptiert ausschliesslich IPv4 und cached das Ergebnis fuer `PUBLIC_ADDRESS_REFRESH_SECONDS`. Bei Fehlern wird `PUBLIC_HOST` verwendet. Die angezeigte Multiplayer-Adresse erhaelt immer Port `11753`.
+Die DDNS-/OpenRCT2-Werbeadresse im Bereich **Server und Website** wird als `advertise_address` in `[network]` gespeichert. Erlaubt sind ein Hostname, IPv4 oder eine geklammerte IPv6-Adresse, jeweils optional mit Port, etwa `park.example.org`, `203.0.113.10:11753` oder `[2001:db8::10]:11753`. URLs, Pfade und Steuerzeichen werden abgewiesen. Das Speichern startet einen laufenden Gameserver einmal kontrolliert neu und die Adresse hat auf der Public-Seite Vorrang vor der bisherigen reinen Anzeigeadresse und der externen Ermittlung.
+
+Wenn keine Werbeadresse und keine manuelle Anzeigeadresse gesetzt sind, fragt die Verwaltung `PUBLIC_ADDRESS_URL` mit kurzem Timeout ab, akzeptiert ausschliesslich IPv4 und cached das Ergebnis fuer `PUBLIC_ADDRESS_REFRESH_SECONDS`. Bei Fehlern wird `PUBLIC_HOST` verwendet. Die angezeigte Multiplayer-Adresse erhaelt immer Port `11753`.
+
+Abstuerze eines Gameclients beim Verbinden lassen sich nicht allein anhand der IP-Adresse diagnostizieren. Dafuer werden die Server- und Client-Logs benoetigt.
 
 ## Bestehenden LXC auf Git umstellen
 
